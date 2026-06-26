@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         INCORE — Масова перевірка ЮР осіб
 // @namespace    https://incore.universalna.com/
-// @version      1.0.0
+// @version      1.2.0
 // @description  Перевіряє список ЮО за ЄДРПОУ: чи є в INCORE та чи є поліси (НАШ / НЕ НАШ)
 // @author       Oleg Volokhovskyi
 // @match        https://incore.universalna.com/*
@@ -18,6 +18,7 @@
 
   // ── Antiforgery token ──────────────────────────────────────────────────────
   function getTokenFromDOM() {
+    // 1. Hidden inputs
     const selectors = [
       'input[name="__RequestVerificationToken"]',
       'input[name="RequestVerificationToken"]',
@@ -25,47 +26,124 @@
     ];
     for (const sel of selectors) {
       const el = document.querySelector(sel);
-      if (el) return el.value || el.content;
+      if (el) { const v = el.value || el.content; if (v) return v; }
     }
+    // 2. Global JS variable (some ASP.NET setups)
     if (window.__RequestVerificationToken) return window.__RequestVerificationToken;
+    // 3. jQuery ajaxSetup headers (INCORE uses jQuery heavily)
+    try {
+      const jq = window.jQuery || window.$;
+      if (jq && jq.ajaxSettings && jq.ajaxSettings.headers) {
+        const h = jq.ajaxSettings.headers;
+        const v = h['RequestVerificationToken'] || h['requestverificationtoken'];
+        if (v) return v;
+      }
+    } catch (_) {}
+    // 4. Any hidden input anywhere in the page
+    for (const inp of document.querySelectorAll('input[type="hidden"]')) {
+      if (/requestverification/i.test(inp.name) && inp.value) return inp.value;
+    }
     return null;
   }
 
   async function fetchToken() {
     let token = getTokenFromDOM();
-    if (token) return token;
+    if (token) { console.log('[IC] Token from DOM'); return token; }
+    // Fallback: fetch the dictionary page which has a form with the token
     try {
       const res = await fetch('/Dictionaries/JuridicalPersons', { credentials: 'include' });
       const html = await res.text();
-      const m = html.match(/name="__RequestVerificationToken"[^>]+value="([^"]+)"/i)
-               || html.match(/name="RequestVerificationToken"[^>]+value="([^"]+)"/i)
-               || html.match(/<meta[^>]+name="RequestVerificationToken"[^>]+content="([^"]+)"/i);
-      if (m) return m[1];
+      const patterns = [
+        /name="__RequestVerificationToken"[^>]+value="([^"]+)"/i,
+        /name="RequestVerificationToken"[^>]+value="([^"]+)"/i,
+        /<meta[^>]+name="RequestVerificationToken"[^>]+content="([^"]+)"/i,
+        /RequestVerificationToken['"]\s*:\s*['"]([^'"]+)['"]/i,
+      ];
+      for (const re of patterns) {
+        const m = html.match(re);
+        if (m && m[1]) { console.log('[IC] Token from page fetch'); return m[1]; }
+      }
+      console.warn('[IC] Token not found in fetched page HTML');
     } catch (e) {
-      console.warn('[INCORE Checker] Token fetch failed:', e);
+      console.warn('[IC] Token fetch error:', e);
     }
     return null;
   }
 
   // ── API ────────────────────────────────────────────────────────────────────
-  const PAGE_ID = crypto.randomUUID ? crypto.randomUUID()
-    : 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => {
-        const r = Math.random() * 16 | 0;
-        return (c === 'x' ? r : (r & 0x3 | 0x8)).toString(16);
-      });
+  const PAGE_ID = (crypto.randomUUID || (() =>
+    'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => {
+      const r = Math.random() * 16 | 0;
+      return (c === 'x' ? r : (r & 0x3 | 0x8)).toString(16);
+    })))();
 
   function apiHeaders(token) {
-    return {
+    const h = {
       'Accept': 'application/json, text/javascript, */*; q=0.01',
       'Content-Type': 'application/json; charset=UTF-8',
-      'requestverificationtoken': token,
       'X-Requested-With': 'XMLHttpRequest',
       'x-page-id': PAGE_ID,
     };
+    if (token) h['requestverificationtoken'] = token;
+    return h;
   }
 
-  async function searchByEdrpou(edrpou, token) {
-    const body = {
+  // Forcibly re-fetch a fresh antiforgery token from the server (ignores DOM cache).
+  async function refreshToken() {
+    try {
+      const res = await fetch('/Dictionaries/JuridicalPersons', { credentials: 'include' });
+      const html = await res.text();
+      const patterns = [
+        /name="__RequestVerificationToken"[^>]+value="([^"]+)"/i,
+        /name="RequestVerificationToken"[^>]+value="([^"]+)"/i,
+        /<meta[^>]+name="RequestVerificationToken"[^>]+content="([^"]+)"/i,
+        /RequestVerificationToken['"]\s*:\s*['"]([^'"]+)['"]/i,
+      ];
+      for (const re of patterns) {
+        const m = html.match(re);
+        if (m && m[1]) { console.log('[IC] Token refreshed'); return m[1]; }
+      }
+    } catch (e) {
+      console.warn('[IC] Token refresh error:', e);
+    }
+    return null;
+  }
+
+  async function apiFetch(url, body, token) {
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: apiHeaders(token),
+      credentials: 'include',
+      body: JSON.stringify(body),
+    });
+    if (!res.ok) {
+      let detail = '';
+      try { detail = (await res.text()).slice(0, 300); } catch (_) {}
+      console.error(`[IC] ${url} → HTTP ${res.status}`, detail);
+      throw new Error(`HTTP_${res.status}`);
+    }
+    return res.json();
+  }
+
+  // One fetch attempt with automatic token-refresh retry on 400/500.
+  async function apiFetchWithRetry(url, body, tokenHolder) {
+    try {
+      return await apiFetch(url, body, tokenHolder.value);
+    } catch (e) {
+      if (/HTTP_[45]/.test(e.message)) {
+        console.warn('[IC] Got ' + e.message + ', refreshing token and retrying…');
+        const fresh = await refreshToken();
+        if (fresh) {
+          tokenHolder.value = fresh;
+          return await apiFetch(url, body, fresh);
+        }
+      }
+      throw e;
+    }
+  }
+
+  async function searchByEdrpou(edrpou, tokenHolder) {
+    return apiFetchWithRetry('/Grid/GetDictionaryJuridicalPersons?lang=uk-UA', {
       _search: true,
       nd: Date.now(),
       rows: 10,
@@ -78,19 +156,11 @@
       jsComponentId: 'JuridicalPersons',
       culture: 'uk-UA',
       IdentificationCodeEDRPOU: edrpou,
-    };
-    const res = await fetch('/Grid/GetDictionaryJuridicalPersons?lang=uk-UA', {
-      method: 'POST',
-      headers: apiHeaders(token),
-      credentials: 'include',
-      body: JSON.stringify(body),
-    });
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    return res.json();
+    }, tokenHolder);
   }
 
-  async function getObjectProducts(entityGid, token) {
-    const body = {
+  async function getObjectProducts(entityGid, tokenHolder) {
+    return apiFetchWithRetry('/Grid/GetObjectProducts?lang=uk-UA', {
       _search: false,
       nd: Date.now(),
       rows: 10,
@@ -101,25 +171,18 @@
       enabled: true,
       entityGid,
       culture: 'uk-UA',
-    };
-    const res = await fetch('/Grid/GetObjectProducts?lang=uk-UA', {
-      method: 'POST',
-      headers: apiHeaders(token),
-      credentials: 'include',
-      body: JSON.stringify(body),
-    });
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    return res.json();
+    }, tokenHolder);
   }
 
   const sleep = ms => new Promise(r => setTimeout(r, ms));
 
   // ── Processing ─────────────────────────────────────────────────────────────
-  async function checkOne(edrpou, token) {
+  // tokenHolder = { value: '<token>' } — mutated in-place on auto-refresh
+  async function checkOne(edrpou, tokenHolder) {
     const result = { edrpou, name: '', status: 'error', statusText: 'Помилка' };
 
     // Step 1 — пошук по ЄДРПОУ
-    const searchData = await searchByEdrpou(edrpou, token);
+    const searchData = await searchByEdrpou(edrpou, tokenHolder);
 
     if (!searchData.IsSuccess) {
       result.statusText = searchData.ErrorMessage || 'Помилка API';
@@ -142,7 +205,7 @@
     await sleep(350);
 
     // Step 2 — поліси
-    const productsData = await getObjectProducts(gid, token);
+    const productsData = await getObjectProducts(gid, tokenHolder);
 
     if (productsData.records > 0 || (productsData.rows && productsData.rows.length > 0)) {
       result.status = 'ours';
@@ -471,11 +534,14 @@
       return;
     }
 
-    const token = await fetchToken();
-    if (!token) {
+    const initialToken = await fetchToken();
+    if (!initialToken) {
       alert('Не вдалося отримати токен безпеки.\nПереконайтесь, що ви авторизовані в INCORE і спробуйте ще раз.');
       return;
     }
+    // Mutable holder — refreshed automatically on 4xx/5xx and every TOKEN_REFRESH_EVERY steps
+    const tokenHolder = { value: initialToken };
+    const TOKEN_REFRESH_EVERY = 20;
 
     // Reset
     results = [];
@@ -499,9 +565,16 @@
       progTxt.textContent = `${i + 1} / ${total} — перевіряємо: ${code}`;
       progBar.style.width = `${((i + 1) / total) * 100}%`;
 
+      // Proactively refresh token every TOKEN_REFRESH_EVERY iterations
+      if (i > 0 && i % TOKEN_REFRESH_EVERY === 0) {
+        const fresh = await refreshToken();
+        if (fresh) tokenHolder.value = fresh;
+        console.log(`[IC] Proactive token refresh at step ${i + 1}`);
+      }
+
       let r;
       try {
-        r = await checkOne(code, token);
+        r = await checkOne(code, tokenHolder);
       } catch (e) {
         r = { edrpou: code, name: '', status: 'error', statusText: `Помилка: ${e.message}` };
       }
