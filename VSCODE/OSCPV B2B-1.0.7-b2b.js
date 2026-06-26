@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         OSCPV B2B — Пошук полісів (Odoo + Universalna)
 // @namespace    universalna.oscpv.b2b
-// @version      1.1.1-b2b
+// @version      1.1.2-b2b
 // @description  B2B: пакетний пошук полісів ОСЦПВ для юридичних осіб за ЄДРПОУ (incore + прямий парсинг таблиці + concurrency)
 // @author       custom
 // @match        https://odoo.icu.int/*
@@ -43,17 +43,25 @@
         INCORE_GENERATE_URL: 'https://incore.universalna.com/ReportingServicesReports/ReportsPage?ReportGID=6775b281-c15d-4bba-a238-6c3832843032&handler=GenerateReport&PageNumber=1',
     };
 
+    const SVG_ALL = `<svg viewBox="0 0 20 20" fill="none" width="16" height="16"><path d="M3 5h14M3 10h14M3 15h14" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+    const SVG_TRUCK = `<svg viewBox="0 0 20 20" fill="none" width="16" height="16"><path d="M4 14V6h8v8H4zM12 8h4l2 3v3h-6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><circle cx="6" cy="15" r="2" stroke="currentColor" stroke-width="2"/><circle cx="15" cy="15" r="2" stroke="currentColor" stroke-width="2"/></svg>`;
+    const SVG_AGRO = `<svg viewBox="0 0 20 20" fill="none" width="16" height="16"><path d="M4 14V8l3-2h4l2 2v6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><circle cx="5" cy="14" r="3" stroke="currentColor" stroke-width="2"/><circle cx="14" cy="15" r="2" stroke="currentColor" stroke-width="2"/><path d="M7 8h3v3H7z" stroke="currentColor" stroke-width="2"/></svg>`;
+    const SVG_CAR = `<svg viewBox="0 0 20 20" fill="none" width="16" height="16"><path d="M3 12V8l3-3h8l3 3v4H3z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><circle cx="6" cy="13" r="2" stroke="currentColor" stroke-width="2"/><circle cx="14" cy="13" r="2" stroke="currentColor" stroke-width="2"/></svg>`;
+    const SVG_BUS = `<svg viewBox="0 0 20 20" fill="none" width="16" height="16"><path d="M3 5h14v10H3V5z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><circle cx="6" cy="15" r="2" stroke="currentColor" stroke-width="2"/><circle cx="14" cy="15" r="2" stroke="currentColor" stroke-width="2"/><path d="M3 10h14" stroke="currentColor" stroke-width="2"/></svg>`;
+    const SVG_MOTO = `<svg viewBox="0 0 20 20" fill="none" width="16" height="16"><circle cx="5" cy="13" r="3" stroke="currentColor" stroke-width="2"/><circle cx="15" cy="13" r="3" stroke="currentColor" stroke-width="2"/><path d="M5 13l4-5h3l3 5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M8 8l2-3h3" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+    const SVG_TRAILER = `<svg viewBox="0 0 20 20" fill="none" width="16" height="16"><path d="M5 13V7h10v6H5z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><circle cx="10" cy="14" r="2" stroke="currentColor" stroke-width="2"/><path d="M15 10h3" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+
     // Категорії ТЗ для табів і фарбування pill-бейджів
     // ключ: код з vehicle_type (A1, B1, C1, тощо)
     // group: ID табу для групування
     const VEHICLE_GROUPS = [
-        { id: 'all', label: 'Всі', emoji: '', codes: null },
-        { id: 'truck', label: 'Вантажні', emoji: '🚛', codes: ['C0', 'C1', 'C2'] },
-        { id: 'agro', label: 'Сільгосп', emoji: '🚜', codes: ['G', 'G1', 'G2', 'G3', 'H', 'H1', 'H2', 'H3'] },
-        { id: 'car', label: 'Легкові', emoji: '🚗', codes: ['B1', 'B2', 'B3', 'B4', 'B5'] },
-        { id: 'bus', label: 'Автобуси', emoji: '🚌', codes: ['D1', 'D2'] },
-        { id: 'moto', label: 'Мото', emoji: '🏍️', codes: ['A1', 'A2'] },
-        { id: 'trailer', label: 'Причепи', emoji: '🛻', codes: ['E', 'F'] },
+        { id: 'all', label: 'ВСІ', icon: SVG_ALL, codes: null },
+        { id: 'truck', label: 'ВАНТАЖНІ', icon: SVG_TRUCK, codes: ['C0', 'C1', 'C2'] },
+        { id: 'agro', label: 'СІЛЬГОСП', icon: SVG_AGRO, codes: ['G', 'G1', 'G2', 'G3', 'H', 'H1', 'H2', 'H3'] },
+        { id: 'car', label: 'ЛЕГКОВІ', icon: SVG_CAR, codes: ['B1', 'B2', 'B3', 'B4', 'B5'] },
+        { id: 'bus', label: 'АВТОБУСИ', icon: SVG_BUS, codes: ['D1', 'D2'] },
+        { id: 'moto', label: 'МОТО', icon: SVG_MOTO, codes: ['A1', 'A2'] },
+        { id: 'trailer', label: 'ПРИЧЕПИ', icon: SVG_TRAILER, codes: ['E', 'F'] },
     ];
 
     // Витягуємо код категорії з рядка типу "C1 - вантажні автомобілі..."
@@ -474,6 +482,7 @@
                                 <div class="oscpv2-tabs" id="oscpv2-tabs" role="tablist">
                                     ${VEHICLE_GROUPS.map((g, i) => `
                                         <button type="button" class="oscpv2-tab ${i === 0 ? 'active' : ''}" data-tab="${g.id}">
+                                            ${g.icon || ''}
                                             ${g.label}
                                             <span class="oscpv2-tab-count" data-tab-count="${g.id}">0</span>
                                         </button>
@@ -1412,8 +1421,8 @@
 
         // Тип ТЗ - pill з відповідним кольором
         const typeMeta = VEHICLE_GROUPS.find(g => g.id === groupId);
-        const typeLabel = typeMeta ? (typeMeta.emoji + ' ' + typeMeta.label) :
-            (getVehicleCode(r.vehicle_type) || 'інше');
+        const typeLabelHtml = typeMeta ? (typeMeta.icon + ' ' + escapeHtml(typeMeta.label)) :
+            escapeHtml(getVehicleCode(r.vehicle_type) || 'ІНШЕ');
 
         // Страховик + рік
         const insurerCell = `
@@ -1445,7 +1454,7 @@
                     ${r.plate_no ? `<span class="oscpv2-car-plate">${escapeHtml(r.plate_no)}</span>` : ''}
                 </div>
             </td>
-            <td><span class="oscpv2-type-pill oscpv2-type-${groupId}">${escapeHtml(typeLabel)}</span></td>
+            <td><span class="oscpv2-type-pill oscpv2-type-${groupId}">${typeLabelHtml}</span></td>
             <td>${insurerCell}</td>
             <td>${lossCell}</td>
         `;
