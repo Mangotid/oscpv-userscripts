@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         OSCPV B2B — Пошук полісів (Odoo + Universalna)
 // @namespace    universalna.oscpv.b2b
-// @version      1.1.0-b2b
+// @version      1.1.1-b2b
 // @description  B2B: пакетний пошук полісів ОСЦПВ для юридичних осіб за ЄДРПОУ (incore + прямий парсинг таблиці + concurrency)
 // @author       custom
 // @match        https://odoo.icu.int/*
@@ -22,7 +22,7 @@
 // @run-at       document-start
 // ==/UserScript==
 
-(function() {
+(function () {
     'use strict';
 
     // =====================================================================
@@ -47,13 +47,13 @@
     // ключ: код з vehicle_type (A1, B1, C1, тощо)
     // group: ID табу для групування
     const VEHICLE_GROUPS = [
-        { id: 'all',      label: 'Всі',         emoji: '',     codes: null },
-        { id: 'truck',    label: 'Вантажні',    emoji: '🚛',   codes: ['C0', 'C1', 'C2'] },
-        { id: 'agro',     label: 'Сільгосп',    emoji: '🚜',   codes: ['G', 'G1', 'G2', 'G3', 'H', 'H1', 'H2', 'H3'] },
-        { id: 'car',      label: 'Легкові',     emoji: '🚗',   codes: ['B1', 'B2', 'B3', 'B4', 'B5'] },
-        { id: 'bus',      label: 'Автобуси',    emoji: '🚌',   codes: ['D1', 'D2'] },
-        { id: 'moto',     label: 'Мото',        emoji: '🏍️',  codes: ['A1', 'A2'] },
-        { id: 'trailer',  label: 'Причепи',     emoji: '🛻',   codes: ['E', 'F'] },
+        { id: 'all', label: 'Всі', emoji: '', codes: null },
+        { id: 'truck', label: 'Вантажні', emoji: '🚛', codes: ['C0', 'C1', 'C2'] },
+        { id: 'agro', label: 'Сільгосп', emoji: '🚜', codes: ['G', 'G1', 'G2', 'G3', 'H', 'H1', 'H2', 'H3'] },
+        { id: 'car', label: 'Легкові', emoji: '🚗', codes: ['B1', 'B2', 'B3', 'B4', 'B5'] },
+        { id: 'bus', label: 'Автобуси', emoji: '🚌', codes: ['D1', 'D2'] },
+        { id: 'moto', label: 'Мото', emoji: '🏍️', codes: ['A1', 'A2'] },
+        { id: 'trailer', label: 'Причепи', emoji: '🛻', codes: ['E', 'F'] },
     ];
 
     // Витягуємо код категорії з рядка типу "C1 - вантажні автомобілі..."
@@ -84,7 +84,7 @@
     function installTokenSniffer() {
         try {
             const origFetch = window.fetch;
-            window.fetch = function(input, init) {
+            window.fetch = function (input, init) {
                 try {
                     const headers = (init && init.headers) || (input && input.headers) || {};
                     let auth = null;
@@ -96,7 +96,7 @@
                     if (auth && auth.startsWith('Bearer ')) {
                         LIVE_TOKEN = auth.slice(7);
                     }
-                } catch(e) {}
+                } catch (e) { }
                 const result = origFetch.apply(this, arguments);
                 // Перехоплюємо SELECT/export відповіді таблиці + авто-визначення робочого URL
                 try {
@@ -108,40 +108,40 @@
                             if (ct.includes('json')) {
                                 resp.clone().json().then(data => {
                                     _storeTableCache(data, url);
-                                }).catch(() => {});
+                                }).catch(() => { });
                             } else if (ct.includes('spreadsheet') || ct.includes('octet') || ct.includes('xlsx')) {
                                 GM_setValue('dict444bb_dl_url', url.split('?')[0]);
                             }
-                        }).catch(() => {});
+                        }).catch(() => { });
                     }
-                } catch(e) {}
+                } catch (e) { }
                 return result;
             };
 
             const origSetHeader = XMLHttpRequest.prototype.setRequestHeader;
-            XMLHttpRequest.prototype.setRequestHeader = function(name, value) {
+            XMLHttpRequest.prototype.setRequestHeader = function (name, value) {
                 try {
                     if (name && name.toLowerCase() === 'authorization' && value && value.startsWith('Bearer ')) {
                         LIVE_TOKEN = value.slice(7);
                     }
-                } catch(e) {}
+                } catch (e) { }
                 return origSetHeader.apply(this, arguments);
             };
 
             // Перехоплюємо також XHR-відповіді (на випадок якщо сторінка ходить через XHR)
             const origXHROpen = XMLHttpRequest.prototype.open;
-            XMLHttpRequest.prototype.open = function(method, url) {
+            XMLHttpRequest.prototype.open = function (method, url) {
                 if (url && typeof url === 'string' && url.includes('InsuredLoss') && !url.includes('/insert')) {
                     this._oscpv_capture = true;
                 }
                 return origXHROpen.apply(this, arguments);
             };
             const origXHRSend = XMLHttpRequest.prototype.send;
-            XMLHttpRequest.prototype.send = function() {
+            XMLHttpRequest.prototype.send = function () {
                 if (this._oscpv_capture) {
                     this.addEventListener('load', () => {
                         if (this.status === 200) {
-                            try { _storeTableCache(JSON.parse(this.responseText)); } catch(e) {}
+                            try { _storeTableCache(JSON.parse(this.responseText)); } catch (e) { }
                         }
                     });
                 }
@@ -149,7 +149,7 @@
             };
 
             console.log('[OSCPV] Token sniffer + table cache interceptor installed');
-        } catch(e) {
+        } catch (e) {
             console.warn('[OSCPV] Could not install sniffer:', e);
         }
     }
@@ -157,9 +157,9 @@
     function _storeTableCache(data, sourceUrl) {
         try {
             const rows = Array.isArray(data) ? data :
-                         Array.isArray(data?.data) ? data.data :
-                         Array.isArray(data?.rows) ? data.rows :
-                         Array.isArray(data?.items) ? data.items : null;
+                Array.isArray(data?.data) ? data.data :
+                    Array.isArray(data?.rows) ? data.rows :
+                        Array.isArray(data?.items) ? data.items : null;
             if (!rows || !rows.length) return;
             // Зберігаємо лише id + response щоб тримати розмір малим
             const minimal = rows
@@ -171,15 +171,15 @@
             if (sourceUrl && !GM_getValue('dict444bb_dl_url', '')) {
                 GM_setValue('dict444bb_dl_url', sourceUrl.split('?')[0]);
             }
-        } catch(e) {}
+        } catch (e) { }
     }
 
     // ─── GM_xmlhttpRequest promise wrapper ───────────────────────────────────
     function gmXHR(opts) {
         return new Promise((resolve, reject) => {
             GM_xmlhttpRequest(Object.assign({}, opts, {
-                onload:   resolve,
-                onerror:  () => reject(new Error('network error')),
+                onload: resolve,
+                onerror: () => reject(new Error('network error')),
                 ontimeout: () => reject(new Error('timeout'))
             }));
         });
@@ -194,14 +194,14 @@
             const data = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' });
             if (data.length < 2) return null;
             const hdr = data[0].map(h => (h || '').toString().toLowerCase().trim());
-            let idCol   = hdr.findIndex(h => h === 'id');
+            let idCol = hdr.findIndex(h => h === 'id');
             let respCol = hdr.findIndex(h => h === 'response');
-            if (idCol   < 0) idCol   = COL.ID;        // fallback: col 0
+            if (idCol < 0) idCol = COL.ID;        // fallback: col 0
             if (respCol < 0) respCol = COL.RESPONSE;  // fallback: col 18
             return data.slice(1)
                 .map(r => ({ id: parseInt(r[idCol] || 0) || 0, resp: (r[respCol] || '').toString().trim() }))
                 .filter(r => r.id > 0);
-        } catch(e) {
+        } catch (e) {
             console.warn('[OSCPV] parseXLSXRows:', e);
             return null;
         }
@@ -215,7 +215,7 @@
         if (!token) return null;
 
         const saved = GM_getValue('dict444bb_dl_url', '');
-        const base  = 'https://dict.universalna.com/api/24/';
+        const base = 'https://dict.universalna.com/api/24/';
         const candidates = [
             ...(saved ? [saved] : []),
             base + 'select/InsuredLoss',
@@ -237,12 +237,12 @@
                     if (!ct.includes('spreadsheet') && !ct.includes('octet')) {
                         const data = JSON.parse(rj.responseText);
                         const rows = Array.isArray(data) ? data :
-                                     Array.isArray(data?.data) ? data.data :
-                                     Array.isArray(data?.rows) ? data.rows : null;
+                            Array.isArray(data?.data) ? data.data :
+                                Array.isArray(data?.rows) ? data.rows : null;
                         if (rows?.length) {
                             GM_setValue('dict444bb_dl_url', url);
                             return rows.map(r => ({
-                                id:   parseInt(r.id ?? r.ID ?? 0) || 0,
+                                id: parseInt(r.id ?? r.ID ?? 0) || 0,
                                 resp: (r.response ?? r.resp ?? r.RESPONSE ?? '').toString()
                             })).filter(r => r.id > 0);
                         }
@@ -263,7 +263,7 @@
                         return rows;
                     }
                 }
-            } catch(e) {
+            } catch (e) {
                 console.log('[OSCPV] fetchTableRowsDirect failed:', url, e.message);
             }
         }
@@ -352,7 +352,7 @@
             btn.style.background = '#072C2C';
         };
         btn.onmousedown = () => { btn.style.transform = 'scale(0.98)'; };
-        btn.onmouseup   = () => { btn.style.transform = ''; };
+        btn.onmouseup = () => { btn.style.transform = ''; };
         btn.onclick = openModal;
         document.body.appendChild(btn);
         console.log('[OSCPV B2B] FAB додано в Odoo');
@@ -1093,7 +1093,7 @@
         document.head.appendChild(s);
     }
 
-    function log(msg, type='') {
+    function log(msg, type = '') {
         const l = document.getElementById('oscpv2-log');
         if (!l) return;
         const t = new Date().toLocaleTimeString();
@@ -1152,24 +1152,24 @@
                             }
                         }
                         resolve({
-                            brand:    d.brand      || '',
-                            model:    d.model      || '',
-                            year:     d.make_year  ? String(d.make_year) : '',
-                            fuel:     d.fuel       || '',
-                            engine:   d.capacity   ? d.capacity + ' см³' : '',
-                            weight:   d.own_weight ? d.own_weight + ' кг' : '',
+                            brand: d.brand || '',
+                            model: d.model || '',
+                            year: d.make_year ? String(d.make_year) : '',
+                            fuel: d.fuel || '',
+                            engine: d.capacity ? d.capacity + ' см³' : '',
+                            weight: d.own_weight ? d.own_weight + ' кг' : '',
                             total_weight: d.total_weight ? d.total_weight + ' кг' : '',
-                            seats:    d.seating    ? String(d.seating) : '',
-                            region:   d.region     || '',
-                            color:    d.color      || '',
-                            vin:      d.vin        || '',
-                            body:     d.body       || '',
-                            category: d.category   || '',
+                            seats: d.seating ? String(d.seating) : '',
+                            region: d.region || '',
+                            color: d.color || '',
+                            vin: d.vin || '',
+                            body: d.body || '',
+                            category: d.category || '',
                             calc_category: calc_category
                         });
-                    } catch(e) { resolve(null); }
+                    } catch (e) { resolve(null); }
                 },
-                onerror:   () => resolve(null),
+                onerror: () => resolve(null),
                 ontimeout: () => resolve(null)
             });
         });
@@ -1209,7 +1209,7 @@
                     }
                     enriched++;
                 }
-            } catch(e) { /* skip */ }
+            } catch (e) { /* skip */ }
             done++;
             if (btn) btn.textContent = `${done}/${allRows.length}`;
             await sleep(150);
@@ -1319,10 +1319,10 @@
             window.focus();
             let attempts = 0;
             const focusInt = setInterval(() => {
-                try { window.focus(); } catch(e) {}
+                try { window.focus(); } catch (e) { }
                 if (++attempts > 10) clearInterval(focusInt);
             }, 100);
-        } catch(e) {}
+        } catch (e) { }
 
         const progressKey = 'oscpvbb_progress_' + sessionId;
         const resultKey = 'oscpvbb_result_' + sessionId;
@@ -1336,7 +1336,7 @@
                 } else {
                     handleProgressUpdate(data, ipns.length);
                 }
-            } catch(e) {}
+            } catch (e) { }
         });
 
         GM_addValueChangeListener(resultKey, (name, oldV, newV) => {
@@ -1347,7 +1347,7 @@
                 GM_deleteValue('oscpvbb_request_' + sessionId);
                 GM_deleteValue(progressKey);
                 GM_deleteValue(resultKey);
-            } catch(e) {}
+            } catch (e) { }
         });
     }
 
@@ -1413,7 +1413,7 @@
         // Тип ТЗ - pill з відповідним кольором
         const typeMeta = VEHICLE_GROUPS.find(g => g.id === groupId);
         const typeLabel = typeMeta ? (typeMeta.emoji + ' ' + typeMeta.label) :
-                          (getVehicleCode(r.vehicle_type) || 'інше');
+            (getVehicleCode(r.vehicle_type) || 'інше');
 
         // Страховик + рік
         const insurerCell = `
@@ -1599,7 +1599,7 @@
 
     function escapeHtml(s) {
         return String(s).replace(/[&<>"']/g, c =>
-            ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+            ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
     }
 
     function formatMoney(n) {
@@ -1620,10 +1620,10 @@
             fill: { patternType: 'solid', fgColor: { rgb: 'AFEEEE' } },
             alignment: { horizontal: 'center', vertical: 'top', wrapText: true },
             border: {
-                top:    { style: 'thin', color: { rgb: 'CCCCCC' } },
+                top: { style: 'thin', color: { rgb: 'CCCCCC' } },
                 bottom: { style: 'thin', color: { rgb: 'CCCCCC' } },
-                left:   { style: 'thin', color: { rgb: 'CCCCCC' } },
-                right:  { style: 'thin', color: { rgb: 'CCCCCC' } }
+                left: { style: 'thin', color: { rgb: 'CCCCCC' } },
+                right: { style: 'thin', color: { rgb: 'CCCCCC' } }
             }
         };
         const HEADER_CELL_STYLE = {
@@ -1631,10 +1631,10 @@
             fill: { patternType: 'solid', fgColor: { rgb: 'AFEEEE' } },
             alignment: { horizontal: 'center', vertical: 'top', wrapText: true },
             border: {
-                top:    { style: 'thin', color: { rgb: 'CCCCCC' } },
+                top: { style: 'thin', color: { rgb: 'CCCCCC' } },
                 bottom: { style: 'thin', color: { rgb: 'CCCCCC' } },
-                left:   { style: 'thin', color: { rgb: 'CCCCCC' } },
-                right:  { style: 'thin', color: { rgb: 'CCCCCC' } }
+                left: { style: 'thin', color: { rgb: 'CCCCCC' } },
+                right: { style: 'thin', color: { rgb: 'CCCCCC' } }
             }
         };
         const DATA_CELL_STYLE = {
@@ -1719,8 +1719,8 @@
 
         // Merges
         ws['!merges'] = [
-            { s: { r: 0, c: 0 },  e: { r: 0, c: 4 }  }, // A1:E1
-            { s: { r: 0, c: 5 },  e: { r: 0, c: 13 } }, // F1:N1
+            { s: { r: 0, c: 0 }, e: { r: 0, c: 4 } }, // A1:E1
+            { s: { r: 0, c: 5 }, e: { r: 0, c: 13 } }, // F1:N1
             { s: { r: 0, c: 14 }, e: { r: 0, c: 35 } }  // O1:AJ1
         ];
 
@@ -1912,11 +1912,11 @@
             if (window.opener && !window.opener.closed) {
                 window.opener.focus();
             }
-        } catch(e) {}
+        } catch (e) { }
         try {
             window.moveTo(screen.width - 100, screen.height - 100);
             window.resizeTo(200, 100);
-        } catch(e) {}
+        } catch (e) { }
 
         // Показуємо банер що скрипт працює
         showDictBanner();
@@ -1928,8 +1928,8 @@
                 token = localStorage.getItem('token');
             }
             if (!token) {
-                pushProgress(sessionId, {log: 'НЕ ЗНАЙДЕНО актуальний токен', logType: 'err'});
-                pushResult(sessionId, {error: 'no_token'});
+                pushProgress(sessionId, { log: 'НЕ ЗНАЙДЕНО актуальний токен', logType: 'err' });
+                pushResult(sessionId, { error: 'no_token' });
                 return;
             }
             console.log('[OSCPV] Стартую batch з токеном довжиною', token.length);
@@ -2001,7 +2001,7 @@
         return new Promise((resolve) => {
             function processNext() {
                 if (index >= ipns.length - 1 && runningCount === 0) {
-                    pushResult(sessionId, {done: true});
+                    pushResult(sessionId, { done: true });
                     updateBanner('завершено ✓');
                     setTimeout(() => window.close(), 3000);
                     resolve();
@@ -2012,30 +2012,30 @@
                     runningCount++;
                     const i = index;
                     const ipn = ipns[i];
-                    const prefix = `[${i+1}/${ipns.length}] ${ipn}`;
+                    const prefix = `[${i + 1}/${ipns.length}] ${ipn}`;
                     updateBanner(`${completedCount}/${ipns.length}`);
 
                     (async () => {
                         try {
-                            pushProgress(sessionId, {log: `${prefix}: INSERT в dict...`, logType: 'dim'});
+                            pushProgress(sessionId, { log: `${prefix}: INSERT в dict...`, logType: 'dim' });
                             const inserted = await dictInsert(ipn, today);
                             const newId = extractIdFromInsert(inserted);
-                            pushProgress(sessionId, {log: `${prefix}: створено id=${newId || '?'}`, logType: 'dim'});
+                            pushProgress(sessionId, { log: `${prefix}: створено id=${newId || '?'}`, logType: 'dim' });
 
-                            pushProgress(sessionId, {log: `${prefix}: RUN на incore...`, logType: 'dim'});
+                            pushProgress(sessionId, { log: `${prefix}: RUN на incore...`, logType: 'dim' });
                             await importToolRun(ipn);
 
-                            pushProgress(sessionId, {log: `${prefix}: чекаю ${delayRun}мс обробку...`, logType: 'info'});
+                            pushProgress(sessionId, { log: `${prefix}: чекаю ${delayRun}мс обробку...`, logType: 'info' });
                             await sleep(delayRun);
 
-                            pushProgress(sessionId, {log: `${prefix}: парсинг таблиці...`, logType: 'dim'});
+                            pushProgress(sessionId, { log: `${prefix}: парсинг таблиці...`, logType: 'dim' });
                             const responseJson = await parseTableForIpn(ipn, newId, sessionId);
 
                             completedCount++;
                             updateBanner(`${completedCount}/${ipns.length}`);
 
                             if (!responseJson) {
-                                pushProgress(sessionId, {log: `${prefix}: ✗ не знайдено response в таблиці`, logType: 'err', progress: completedCount});
+                                pushProgress(sessionId, { log: `${prefix}: ✗ не знайдено response в таблиці`, logType: 'err', progress: completedCount });
                             } else if (responseJson.oscpv === null || (Array.isArray(responseJson.oscpv) && responseJson.oscpv.length === 0)) {
                                 // ОСЦПВ не знайдено для цього ЄДРПОУ
                                 pushProgress(sessionId, {
@@ -2054,7 +2054,7 @@
                                     }]
                                 });
                             } else {
-                                const oscpvList = responseJson.oscpv.map(p => ({ipn, ...p}));
+                                const oscpvList = responseJson.oscpv.map(p => ({ ipn, ...p }));
                                 pushProgress(sessionId, {
                                     log: `${prefix}: ✓ знайдено ${oscpvList.length} полісів`,
                                     logType: 'ok',
@@ -2064,7 +2064,7 @@
                             }
 
                             if (delayIpn > 0) await sleep(delayIpn);
-                        } catch(e) {
+                        } catch (e) {
                             console.error(e);
                             completedCount++;
                             updateBanner(`${completedCount}/${ipns.length}`);
@@ -2212,23 +2212,23 @@
                         if (row?.resp) {
                             try {
                                 const parsed = JSON.parse(row.resp);
-                                if (sessionId) pushProgress(sessionId, {log: `   ✓ id=${expectedId} знайдено`, logType: 'ok'});
+                                if (sessionId) pushProgress(sessionId, { log: `   ✓ id=${expectedId} знайдено`, logType: 'ok' });
                                 return parsed;
-                            } catch(e) {
-                                if (sessionId) pushProgress(sessionId, {log: `   ⚠ response не JSON`, logType: 'err'});
+                            } catch (e) {
+                                if (sessionId) pushProgress(sessionId, { log: `   ⚠ response не JSON`, logType: 'err' });
                                 return null;
                             }
                         }
                         if (sessionId) pushProgress(sessionId, {
                             log: row ? `   id=${expectedId} є, resp порожній — чекаю...`
-                                     : `   id=${expectedId} ще не з'явився — чекаю...`,
+                                : `   id=${expectedId} ще не з'явився — чекаю...`,
                             logType: 'dim'
                         });
                         if (attempt < MAX_ATTEMPTS) await sleep(ATTEMPT_DELAY);
                         continue;
                     }
                     directKnown = false; // URL ще не закешовано — переходимо на iframe
-                } catch(e) {
+                } catch (e) {
                     directKnown = false;
                 }
             }
@@ -2239,12 +2239,12 @@
             if (result.found && result.responseText) {
                 try {
                     const parsed = JSON.parse(result.responseText);
-                    if (sessionId) pushProgress(sessionId, {log: `   ✓ знайдено id=${result.foundId}`, logType: 'ok'});
+                    if (sessionId) pushProgress(sessionId, { log: `   ✓ знайдено id=${result.foundId}`, logType: 'ok' });
                     return parsed;
-                } catch(e) {
+                } catch (e) {
                     console.warn('[OSCPV] response не JSON:', result.responseText.slice(0, 300));
                     if (sessionId) pushProgress(sessionId, {
-                        log: `   ⚠ response не JSON: ${result.responseText.slice(0,80)}...`,
+                        log: `   ⚠ response не JSON: ${result.responseText.slice(0, 80)}...`,
                         logType: 'err'
                     });
                     return null;
@@ -2252,9 +2252,9 @@
             }
 
             if (result.found && !result.responseText) {
-                if (sessionId) pushProgress(sessionId, {log: `   рядок id=${result.foundId} є, але response ще порожній — чекаю...`, logType: 'dim'});
+                if (sessionId) pushProgress(sessionId, { log: `   рядок id=${result.foundId} є, але response ще порожній — чекаю...`, logType: 'dim' });
             } else if (!result.found) {
-                if (sessionId) pushProgress(sessionId, {log: `   рядок з id=${expectedId} ще не з'явився — чекаю...`, logType: 'dim'});
+                if (sessionId) pushProgress(sessionId, { log: `   рядок з id=${expectedId} ще не з'явився — чекаю...`, logType: 'dim' });
             }
 
             if (attempt < MAX_ATTEMPTS) await sleep(ATTEMPT_DELAY);
@@ -2362,7 +2362,7 @@
             });
             console.log('[OSCPV] Клік на сортування ASC виконано');
             return true;
-        } catch(e) {
+        } catch (e) {
             console.warn('[OSCPV] Помилка кліку на сортування:', e);
             return false;
         }
@@ -2376,7 +2376,7 @@
                 try {
                     const doc = iframe.contentDocument || iframe.contentWindow.document;
                     rows = Array.from(doc.querySelectorAll('tr.el-table__row'));
-                } catch(e) { /* ще не готовий */ }
+                } catch (e) { /* ще не готовий */ }
 
                 if (rows.length > 0) {
                     // дочекаємось ще трохи щоб response повністю прорендерився
@@ -2384,7 +2384,7 @@
                         try {
                             const doc = iframe.contentDocument || iframe.contentWindow.document;
                             resolve(Array.from(doc.querySelectorAll('tr.el-table__row')));
-                        } catch(e) { resolve([]); }
+                        } catch (e) { resolve([]); }
                     }, 800);
                     return;
                 }

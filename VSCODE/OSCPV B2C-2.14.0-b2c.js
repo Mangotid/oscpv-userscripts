@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         OSCPV B2C — Пошук полісів (Odoo + Universalna)
 // @namespace    universalna.oscpv.b2c
-// @version      2.14.0-b2c
+// @version      2.14.1-b2c
 // @description  B2C: ОСЦПВ через incore.universalna.com + дані авто (carplates) + дата початку полісу
 // @author       Universalna Baza
 // @match        https://odoo.icu.int/*
@@ -24,7 +24,7 @@
 // @run-at       document-start
 // ==/UserScript==
 
-(function() {
+(function () {
     'use strict';
 
     // =====================================================================
@@ -63,7 +63,7 @@
     function installTokenSniffer() {
         try {
             const origFetch = window.fetch;
-            window.fetch = function(input, init) {
+            window.fetch = function (input, init) {
                 try {
                     const headers = (init && init.headers) || (input && input.headers) || {};
                     let auth = null;
@@ -75,7 +75,7 @@
                     if (auth && auth.startsWith('Bearer ')) {
                         LIVE_TOKEN = auth.slice(7);
                     }
-                } catch(e) {}
+                } catch (e) { }
                 const result = origFetch.apply(this, arguments);
                 // Capture SELECT/export API responses + auto-discover working URL
                 try {
@@ -87,41 +87,41 @@
                             if (ct.includes('json')) {
                                 resp.clone().json().then(data => {
                                     _storeTableCache(data, url);
-                                }).catch(() => {});
+                                }).catch(() => { });
                             } else if (ct.includes('spreadsheet') || ct.includes('octet') || ct.includes('xlsx')) {
                                 // Binary XLSX from download button — store URL for GM_xmlhttpRequest
                                 GM_setValue('dict444_dl_url', url.split('?')[0]);
                             }
-                        }).catch(() => {});
+                        }).catch(() => { });
                     }
-                } catch(e) {}
+                } catch (e) { }
                 return result;
             };
 
             const origSetHeader = XMLHttpRequest.prototype.setRequestHeader;
-            XMLHttpRequest.prototype.setRequestHeader = function(name, value) {
+            XMLHttpRequest.prototype.setRequestHeader = function (name, value) {
                 try {
                     if (name && name.toLowerCase() === 'authorization' && value && value.startsWith('Bearer ')) {
                         LIVE_TOKEN = value.slice(7);
                     }
-                } catch(e) {}
+                } catch (e) { }
                 return origSetHeader.apply(this, arguments);
             };
 
             // Capture XHR responses too (in case page uses XHR instead of fetch)
             const origXHROpen = XMLHttpRequest.prototype.open;
-            XMLHttpRequest.prototype.open = function(method, url) {
+            XMLHttpRequest.prototype.open = function (method, url) {
                 if (url && typeof url === 'string' && url.includes('InsuredLoss') && !url.includes('/insert')) {
                     this._oscpv_capture = true;
                 }
                 return origXHROpen.apply(this, arguments);
             };
             const origXHRSend = XMLHttpRequest.prototype.send;
-            XMLHttpRequest.prototype.send = function() {
+            XMLHttpRequest.prototype.send = function () {
                 if (this._oscpv_capture) {
                     this.addEventListener('load', () => {
                         if (this.status === 200) {
-                            try { _storeTableCache(JSON.parse(this.responseText)); } catch(e) {}
+                            try { _storeTableCache(JSON.parse(this.responseText)); } catch (e) { }
                         }
                     });
                 }
@@ -129,7 +129,7 @@
             };
 
             console.log('[OSCPV] Token sniffer + table cache interceptor installed');
-        } catch(e) {
+        } catch (e) {
             console.warn('[OSCPV] Could not install sniffer:', e);
         }
     }
@@ -137,9 +137,9 @@
     function _storeTableCache(data, sourceUrl) {
         try {
             const rows = Array.isArray(data) ? data :
-                         Array.isArray(data?.data) ? data.data :
-                         Array.isArray(data?.rows) ? data.rows :
-                         Array.isArray(data?.items) ? data.items : null;
+                Array.isArray(data?.data) ? data.data :
+                    Array.isArray(data?.rows) ? data.rows :
+                        Array.isArray(data?.items) ? data.items : null;
             if (!rows || !rows.length) return;
             // Store only id + response to keep size small
             const minimal = rows
@@ -152,15 +152,15 @@
             if (sourceUrl && !GM_getValue('dict444_dl_url', '')) {
                 GM_setValue('dict444_dl_url', sourceUrl.split('?')[0]);
             }
-        } catch(e) {}
+        } catch (e) { }
     }
 
     // ─── GM_xmlhttpRequest promise wrapper ───────────────────────────────────
     function gmXHR(opts) {
         return new Promise((resolve, reject) => {
             GM_xmlhttpRequest(Object.assign({}, opts, {
-                onload:   resolve,
-                onerror:  () => reject(new Error('network error')),
+                onload: resolve,
+                onerror: () => reject(new Error('network error')),
                 ontimeout: () => reject(new Error('timeout'))
             }));
         });
@@ -175,14 +175,14 @@
             const data = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' });
             if (data.length < 2) return null;
             const hdr = data[0].map(h => (h || '').toString().toLowerCase().trim());
-            let idCol   = hdr.findIndex(h => h === 'id');
+            let idCol = hdr.findIndex(h => h === 'id');
             let respCol = hdr.findIndex(h => h === 'response');
-            if (idCol   < 0) idCol   = COL.ID;       // fallback: col 0
+            if (idCol < 0) idCol = COL.ID;       // fallback: col 0
             if (respCol < 0) respCol = COL.RESPONSE;  // fallback: col 18
             return data.slice(1)
                 .map(r => ({ id: parseInt(r[idCol] || 0) || 0, resp: (r[respCol] || '').toString().trim() }))
                 .filter(r => r.id > 0);
-        } catch(e) {
+        } catch (e) {
             console.warn('[OSCPV] parseXLSXRows:', e);
             return null;
         }
@@ -196,7 +196,7 @@
         if (!token) return null;
 
         const saved = GM_getValue('dict444_dl_url', '');
-        const base  = 'https://dict.universalna.com/api/24/';
+        const base = 'https://dict.universalna.com/api/24/';
         const candidates = [
             ...(saved ? [saved] : []),
             base + 'select/InsuredLoss',
@@ -218,12 +218,12 @@
                     if (!ct.includes('spreadsheet') && !ct.includes('octet')) {
                         const data = JSON.parse(rj.responseText);
                         const rows = Array.isArray(data) ? data :
-                                     Array.isArray(data?.data) ? data.data :
-                                     Array.isArray(data?.rows) ? data.rows : null;
+                            Array.isArray(data?.data) ? data.data :
+                                Array.isArray(data?.rows) ? data.rows : null;
                         if (rows?.length) {
                             GM_setValue('dict444_dl_url', url);
                             return rows.map(r => ({
-                                id:   parseInt(r.id ?? r.ID ?? 0) || 0,
+                                id: parseInt(r.id ?? r.ID ?? 0) || 0,
                                 resp: (r.response ?? r.resp ?? r.RESPONSE ?? '').toString()
                             })).filter(r => r.id > 0);
                         }
@@ -244,7 +244,7 @@
                         return rows;
                     }
                 }
-            } catch(e) {
+            } catch (e) {
                 console.log('[OSCPV] fetchTableRowsDirect failed:', url, e.message);
             }
         }
@@ -336,7 +336,7 @@
             btn.style.background = '#072C2C';
         };
         btn.onmousedown = () => { btn.style.transform = 'scale(0.98)'; };
-        btn.onmouseup   = () => { btn.style.transform = ''; };
+        btn.onmouseup = () => { btn.style.transform = ''; };
         btn.onclick = openModal;
         document.body.appendChild(btn);
         console.log('[OSCPV B2C] FAB додано в Odoo');
@@ -922,7 +922,7 @@
         document.head.appendChild(s);
     }
 
-    function log(msg, type='') {
+    function log(msg, type = '') {
         const l = document.getElementById('oscpv-log');
         if (!l) return;
         const t = new Date().toLocaleTimeString();
@@ -1021,10 +1021,10 @@
             window.focus();
             let attempts = 0;
             const focusInt = setInterval(() => {
-                try { window.focus(); } catch(e) {}
+                try { window.focus(); } catch (e) { }
                 if (++attempts > 10) clearInterval(focusInt);
             }, 100);
-        } catch(e) {}
+        } catch (e) { }
 
         const progressKey = 'oscpv_progress_' + sessionId;
         const resultKey = 'oscpv_result_' + sessionId;
@@ -1038,7 +1038,7 @@
                 } else {
                     handleProgressUpdate(data, ipns.length);
                 }
-            } catch(e) {}
+            } catch (e) { }
         });
 
         GM_addValueChangeListener(resultKey, (name, oldV, newV) => {
@@ -1049,7 +1049,7 @@
                 GM_deleteValue('oscpv_request_' + sessionId);
                 GM_deleteValue(progressKey);
                 GM_deleteValue(resultKey);
-            } catch(e) {}
+            } catch (e) { }
         });
     }
 
@@ -1102,8 +1102,8 @@
                     `;
                 } else {
                     statsFound++;
-                    const carText = [(r.vehicle_brand||''), (r.vehicle_title||'')].filter(Boolean).join(' ') +
-                                    (r.plate_no ? ' / ' + r.plate_no : '');
+                    const carText = [(r.vehicle_brand || ''), (r.vehicle_title || '')].filter(Boolean).join(' ') +
+                        (r.plate_no ? ' / ' + r.plate_no : '');
                     const needCarplates = carplatesEnabled && r.plate_no;
                     const copyBtn = needCarplates
                         ? `<button class="oscpv-copy-btn loading" data-row="${rowIdx}" title="Запит до carplates.app..."><svg viewBox="0 0 14 14" fill="none" width="11" height="11"><path d="M7 1v6M3 4l4 4 4-4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/><path d="M1 11h12" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg></button>`
@@ -1210,24 +1210,24 @@
                             }
                         }
                         resolve({
-                            brand:    d.brand      || '',
-                            model:    d.model      || '',
-                            year:     d.make_year  ? String(d.make_year) : '',
-                            fuel:     d.fuel       || '',
-                            engine:   d.capacity   ? d.capacity + ' см³' : '',
-                            weight:   d.own_weight ? d.own_weight + ' кг' : '',
+                            brand: d.brand || '',
+                            model: d.model || '',
+                            year: d.make_year ? String(d.make_year) : '',
+                            fuel: d.fuel || '',
+                            engine: d.capacity ? d.capacity + ' см³' : '',
+                            weight: d.own_weight ? d.own_weight + ' кг' : '',
                             total_weight: d.total_weight ? d.total_weight + ' кг' : '',
-                            seats:    d.seating    ? String(d.seating) : '',
-                            region:   d.region     || '',
-                            color:    d.color      || '',
-                            vin:      d.vin        || '',
-                            body:     d.body       || '',
-                            category: d.category   || '',
+                            seats: d.seating ? String(d.seating) : '',
+                            region: d.region || '',
+                            color: d.color || '',
+                            vin: d.vin || '',
+                            body: d.body || '',
+                            category: d.category || '',
                             calc_category: calc_category
                         });
-                    } catch(e) { resolve(null); }
+                    } catch (e) { resolve(null); }
                 },
-                onerror:   () => resolve(null),
+                onerror: () => resolve(null),
                 ontimeout: () => resolve(null)
             });
         });
@@ -1263,7 +1263,7 @@
                     data = await fetchGovRegistration(plate);
                     if (data && data.brand) CARPLATES_CACHE.set(plate, data);
                     else data = null;
-                } catch(e) {
+                } catch (e) {
                     console.warn('[OSCPV] carplates error:', e);
                     data = null;
                 }
@@ -1283,19 +1283,19 @@
         // Зберігаємо у самому результаті щоб потрапило в Excel
         if (results[rowIdx]) {
             if (data) {
-                results[rowIdx].cp_brand    = data.brand    || '';
-                results[rowIdx].cp_model    = data.model    || '';
-                results[rowIdx].cp_year     = data.year     || '';
-                results[rowIdx].cp_fuel     = data.fuel     || '';
-                results[rowIdx].cp_engine   = data.engine   || '';
-                results[rowIdx].cp_weight   = data.weight   || '';
+                results[rowIdx].cp_brand = data.brand || '';
+                results[rowIdx].cp_model = data.model || '';
+                results[rowIdx].cp_year = data.year || '';
+                results[rowIdx].cp_fuel = data.fuel || '';
+                results[rowIdx].cp_engine = data.engine || '';
+                results[rowIdx].cp_weight = data.weight || '';
                 results[rowIdx].cp_total_weight = data.total_weight || '';
                 results[rowIdx].cp_calc_cat = data.calc_category || '';
-                results[rowIdx].cp_seats    = data.seats    || '';
-                results[rowIdx].cp_region   = data.region   || '';
-                results[rowIdx].cp_color    = data.color    || '';
-                results[rowIdx].cp_vin      = data.vin      || '';
-                results[rowIdx].cp_body     = data.body     || '';
+                results[rowIdx].cp_seats = data.seats || '';
+                results[rowIdx].cp_region = data.region || '';
+                results[rowIdx].cp_color = data.color || '';
+                results[rowIdx].cp_vin = data.vin || '';
+                results[rowIdx].cp_body = data.body || '';
                 results[rowIdx].cp_category = data.category || '';
             } else {
                 results[rowIdx].cp_brand = '';
@@ -1308,7 +1308,7 @@
         if (!btn) return;
 
         const SVG_COPY = `<svg viewBox="0 0 14 14" fill="none" width="11" height="11"><rect x="2" y="1" width="9" height="12" rx="1" stroke="currentColor" stroke-width="1.5"/><path d="M5 5h4M5 8h4M5 11h2" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>`;
-        const SVG_ERR  = `<svg viewBox="0 0 14 14" fill="none" width="11" height="11"><path d="M2 2l10 10M12 2L2 12" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>`;
+        const SVG_ERR = `<svg viewBox="0 0 14 14" fill="none" width="11" height="11"><path d="M2 2l10 10M12 2L2 12" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>`;
         if (data) {
             btn.classList.remove('loading', 'error');
             btn.innerHTML = SVG_COPY;
@@ -1329,15 +1329,15 @@
         const engine = [d.fuel || '', d.engine || ''].filter(Boolean).join(' ');
         const lines = [];
         if (brandModel) lines.push(`Авто: ${brandModel}`);
-        if (d.year)   lines.push(`Рік: ${d.year}`);
-        if (d.color)  lines.push(`Колір: ${d.color}`);
-        if (engine)   lines.push(`Двигун: ${engine}`);
+        if (d.year) lines.push(`Рік: ${d.year}`);
+        if (d.color) lines.push(`Колір: ${d.color}`);
+        if (engine) lines.push(`Двигун: ${engine}`);
         if (d.weight) lines.push(`Маса: ${d.weight}`);
         if (d.total_weight) lines.push(`Повна маса: ${d.total_weight}`);
         if (d.calc_category) lines.push(`Розрахована категорія: ${d.calc_category}`);
-        if (d.seats)  lines.push(`Місць: ${d.seats}`);
+        if (d.seats) lines.push(`Місць: ${d.seats}`);
         if (d.region) lines.push(`Регіон: ${d.region}`);
-        if (d.vin)    lines.push(`VIN: ${d.vin}`);
+        if (d.vin) lines.push(`VIN: ${d.vin}`);
         return lines.join('\n');
     }
 
@@ -1363,11 +1363,11 @@
         const copyToClipboard = async () => {
             try {
                 await navigator.clipboard.writeText(text);
-            } catch(e) {
+            } catch (e) {
                 const ta = document.createElement('textarea');
                 ta.value = text; ta.style.cssText = 'position:fixed;opacity:0';
                 document.body.appendChild(ta); ta.select();
-                try { document.execCommand('copy'); } catch(_) {}
+                try { document.execCommand('copy'); } catch (_) { }
                 ta.remove();
             }
         };
@@ -1417,10 +1417,10 @@
                 window.focus();
                 let focusAttempts = 0;
                 const focusInterval = setInterval(() => {
-                    try { window.focus(); } catch(e) {}
+                    try { window.focus(); } catch (e) { }
                     if (++focusAttempts > 10) clearInterval(focusInterval);
                 }, 100);
-            } catch(e) {}
+            } catch (e) { }
 
             let finished = false;
             let listenerId = null;
@@ -1428,14 +1428,14 @@
             const finish = (result, isError) => {
                 if (finished) return;
                 finished = true;
-                const elapsed = ((Date.now() - startedAt)/1000).toFixed(1);
+                const elapsed = ((Date.now() - startedAt) / 1000).toFixed(1);
                 console.log(`[OSCPV] carplates ${vin}: завершено за ${elapsed}с`,
                     isError ? 'ERROR' : 'OK', result);
                 if (listenerId !== null) {
-                    try { GM_removeValueChangeListener(listenerId); } catch(e) {}
+                    try { GM_removeValueChangeListener(listenerId); } catch (e) { }
                 }
                 GM_deleteValue(resKey);
-                try { win.close(); } catch(e) {}
+                try { win.close(); } catch (e) { }
                 if (isError) reject(result);
                 else resolve(result);
             };
@@ -1451,7 +1451,7 @@
                     } else if (payload) {
                         finish(payload, false);
                     }
-                } catch(e) {
+                } catch (e) {
                     console.warn('[OSCPV] parseCarplates JSON error:', e);
                     finish(null, false);
                 }
@@ -1514,28 +1514,28 @@
                 updateBanner(`${data.brand} ${data.model} ${data.year}`, '#059669');
             } else {
                 console.warn('[OSCPV] DOM extract failed:', errorMsg || 'no brand');
-                GM_setValue(resKey, JSON.stringify({error: errorMsg || 'no_brand'}));
+                GM_setValue(resKey, JSON.stringify({ error: errorMsg || 'no_brand' }));
                 updateBanner('Помилка: ' + (errorMsg || 'no_brand'), '#dc2626');
             }
             try {
                 if (window.opener && !window.opener.closed) {
                     window.opener.focus();
                 }
-            } catch(e) {}
+            } catch (e) { }
             if (!DEBUG_KEEP_OPEN) {
-                setTimeout(() => { try { window.close(); } catch(_) {} }, 300);
+                setTimeout(() => { try { window.close(); } catch (_) { } }, 300);
             }
         };
 
         try {
             window.moveTo(screen.width - 100, screen.height - 100);
             window.resizeTo(200, 100);
-        } catch(e) {}
+        } catch (e) { }
         try {
             if (window.opener && !window.opener.closed) {
                 window.opener.focus();
             }
-        } catch(e) {}
+        } catch (e) { }
 
         const startedAt = Date.now();
         const tryParse = () => {
@@ -1546,7 +1546,7 @@
                     finish(data);
                     return;
                 }
-            } catch(e) {
+            } catch (e) {
                 console.warn('[OSCPV] DOM parse error:', e);
             }
             if (Date.now() - startedAt > CONFIG.CARPLATES_TIMEOUT) {
@@ -1632,7 +1632,7 @@
             try {
                 await carplatesQueue;
                 await Promise.all([...CARPLATES_PENDING.values()].map(p => p.catch(() => null)));
-            } catch(e) {
+            } catch (e) {
                 console.warn('[OSCPV] carplates queue завершилась з помилкою:', e);
             }
             log(`carplates: всі запити завершено`, 'ok');
@@ -1648,7 +1648,7 @@
 
     function escapeHtml(s) {
         return String(s).replace(/[&<>"']/g, c =>
-            ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+            ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
     }
 
     function formatMoney(n) {
@@ -1840,14 +1840,14 @@
         if (!results.length) return alert('Немає даних для експорту');
         // У Excel виключаємо технічне поле _notFound
         const cleanResults = results.map(r => {
-            const c = {...r};
+            const c = { ...r };
             delete c._notFound;
             return c;
         });
         const ws = XLSX.utils.json_to_sheet(cleanResults);
         const wb = XLSX.utils.book_new();
         XLSX.utils.book_append_sheet(wb, ws, 'OSCPV');
-        XLSX.writeFile(wb, `oscpv_b2c_${new Date().toISOString().slice(0,10)}_${Date.now()}.xlsx`);
+        XLSX.writeFile(wb, `oscpv_b2c_${new Date().toISOString().slice(0, 10)}_${Date.now()}.xlsx`);
     }
 
 
@@ -1964,11 +1964,11 @@
             if (window.opener && !window.opener.closed) {
                 window.opener.focus();
             }
-        } catch(e) {}
+        } catch (e) { }
         try {
             window.moveTo(screen.width - 100, screen.height - 100);
             window.resizeTo(200, 100);
-        } catch(e) {}
+        } catch (e) { }
 
         showDictBanner();
 
@@ -1977,8 +1977,8 @@
                 token = localStorage.getItem('token');
             }
             if (!token) {
-                pushProgress(sessionId, {log: 'НЕ ЗНАЙДЕНО актуальний токен', logType: 'err'});
-                pushResult(sessionId, {error: 'no_token'});
+                pushProgress(sessionId, { log: 'НЕ ЗНАЙДЕНО актуальний токен', logType: 'err' });
+                pushResult(sessionId, { error: 'no_token' });
                 return;
             }
             console.log('[OSCPV] Стартую batch з токеном довжиною', token.length);
@@ -2049,7 +2049,7 @@
         return new Promise((resolve) => {
             function processNext() {
                 if (index >= ipns.length - 1 && runningCount === 0) {
-                    pushResult(sessionId, {done: true});
+                    pushResult(sessionId, { done: true });
                     updateBanner('завершено ✓');
                     setTimeout(() => window.close(), 3000);
                     resolve();
@@ -2060,30 +2060,30 @@
                     runningCount++;
                     const i = index;
                     const ipn = ipns[i];
-                    const prefix = `[${i+1}/${ipns.length}] ${ipn}`;
+                    const prefix = `[${i + 1}/${ipns.length}] ${ipn}`;
                     updateBanner(`${completedCount}/${ipns.length}`);
 
                     (async () => {
                         try {
-                            pushProgress(sessionId, {log: `${prefix}: INSERT в dict...`, logType: 'dim'});
+                            pushProgress(sessionId, { log: `${prefix}: INSERT в dict...`, logType: 'dim' });
                             const inserted = await dictInsert(ipn, today);
                             const newId = extractIdFromInsert(inserted);
-                            pushProgress(sessionId, {log: `${prefix}: створено id=${newId || '?'}`, logType: 'dim'});
+                            pushProgress(sessionId, { log: `${prefix}: створено id=${newId || '?'}`, logType: 'dim' });
 
-                            pushProgress(sessionId, {log: `${prefix}: RUN на incore...`, logType: 'dim'});
+                            pushProgress(sessionId, { log: `${prefix}: RUN на incore...`, logType: 'dim' });
                             await importToolRun(ipn);
 
-                            pushProgress(sessionId, {log: `${prefix}: чекаю ${delayRun}мс обробку...`, logType: 'info'});
+                            pushProgress(sessionId, { log: `${prefix}: чекаю ${delayRun}мс обробку...`, logType: 'info' });
                             await sleep(delayRun);
 
-                            pushProgress(sessionId, {log: `${prefix}: парсинг таблиці...`, logType: 'dim'});
+                            pushProgress(sessionId, { log: `${prefix}: парсинг таблиці...`, logType: 'dim' });
                             const responseJson = await parseTableForIpn(ipn, newId, sessionId);
 
                             completedCount++;
                             updateBanner(`${completedCount}/${ipns.length}`);
 
                             if (!responseJson) {
-                                pushProgress(sessionId, {log: `${prefix}: ✗ не знайдено response в таблиці`, logType: 'err', progress: completedCount});
+                                pushProgress(sessionId, { log: `${prefix}: ✗ не знайдено response в таблиці`, logType: 'err', progress: completedCount });
                             } else if (responseJson.oscpv === null || (Array.isArray(responseJson.oscpv) && responseJson.oscpv.length === 0)) {
                                 pushProgress(sessionId, {
                                     log: `${prefix}: ⚠ Авто відсутнє або страхування не на клієнті`,
@@ -2101,7 +2101,7 @@
                                     }]
                                 });
                             } else {
-                                const oscpvList = responseJson.oscpv.map(p => ({ipn, ...p}));
+                                const oscpvList = responseJson.oscpv.map(p => ({ ipn, ...p }));
 
                                 // Дата початку полісу (бінарний пошук через dict/import-tool)
                                 if (req.policyStart) {
@@ -2117,7 +2117,7 @@
                             }
 
                             if (delayIpn > 0) await sleep(delayIpn);
-                        } catch(e) {
+                        } catch (e) {
                             console.error(e);
                             completedCount++;
                             updateBanner(`${completedCount}/${ipns.length}`);
@@ -2179,15 +2179,15 @@
                 const vinPolicies = oscpvList
                     .filter(q => (q.vin || '').trim() === vin)
                     .sort((a, b) => parseInt(b.policy_no || 0) - parseInt(a.policy_no || 0));
-                const newest    = vinPolicies[0];
-                const knownP0        = (newest.policy_no || '').toString();
-                const knownEnd       = newest.end_date   || '';
-                const knownPrev      = vinPolicies[1] ? (vinPolicies[1].policy_no || '').toString() : '';
-                const knownPrevEnd   = vinPolicies[1] ? (vinPolicies[1].end_date  || '') : '';
-                const startYearRaw   = parseInt(newest.start_date || '');
+                const newest = vinPolicies[0];
+                const knownP0 = (newest.policy_no || '').toString();
+                const knownEnd = newest.end_date || '';
+                const knownPrev = vinPolicies[1] ? (vinPolicies[1].policy_no || '').toString() : '';
+                const knownPrevEnd = vinPolicies[1] ? (vinPolicies[1].end_date || '') : '';
+                const startYearRaw = parseInt(newest.start_date || '');
                 const knownStartYear = (startYearRaw >= 2000 && startYearRaw <= 2100) ? startYearRaw : 0;
 
-                pushProgress(sessionId, {log: `${prefix}: початок полісу для VIN ${vin}...`, logType: 'info'});
+                pushProgress(sessionId, { log: `${prefix}: початок полісу для VIN ${vin}...`, logType: 'info' });
                 const result = await findPolicyStartByDate(ipn, vin, sessionId, delayRun, knownP0, knownEnd, knownPrev, knownPrevEnd, knownStartYear);
                 if (result) {
                     const startDate = result.startDate || '';
@@ -2204,15 +2204,17 @@
                         }
                     });
                     const prevDate = result.startDateRaw ? uaDate(addDaysD(result.startDateRaw, -365)) : '';
-                    pushProgress(sessionId, {log: `${prefix}: VIN ${vin} → початок ${startDate}` +
-                        (result.prevPolicy && prevDate ? ` (попередній ${result.prevPolicy}: ≈ ${prevDate})` : ''),
-                        logType: 'ok'});
+                    pushProgress(sessionId, {
+                        log: `${prefix}: VIN ${vin} → початок ${startDate}` +
+                            (result.prevPolicy && prevDate ? ` (попередній ${result.prevPolicy}: ≈ ${prevDate})` : ''),
+                        logType: 'ok'
+                    });
                 } else {
-                    pushProgress(sessionId, {log: `${prefix}: VIN ${vin} — дату початку не визначено`, logType: 'err'});
+                    pushProgress(sessionId, { log: `${prefix}: VIN ${vin} — дату початку не визначено`, logType: 'err' });
                 }
-            } catch(e) {
+            } catch (e) {
                 console.warn('[OSCPV] enrichPolicyStart error', e);
-                pushProgress(sessionId, {log: `${prefix}: VIN ${vin} — помилка: ${e.message}`, logType: 'err'});
+                pushProgress(sessionId, { log: `${prefix}: VIN ${vin} — помилка: ${e.message}`, logType: 'err' });
             }
         }
     }
@@ -2234,10 +2236,10 @@
             // Range probe fallback (only when called without P0 — should not happen in normal flow)
             const lo400 = addDaysD(today, -400);
             const lo400ISO = isoDate(lo400);
-            pushProgress(sessionId, {log: `   VIN ${vin}: діапазон ${lo400ISO}–${todayISO}...`, logType: 'dim'});
+            pushProgress(sessionId, { log: `   VIN ${vin}: діапазон ${lo400ISO}–${todayISO}...`, logType: 'dim' });
             const allPols = await probeRangeDates(ipn, vin, lo400ISO, todayISO, delayRun, sessionId);
             if (!allPols || !allPols.length) {
-                pushProgress(sessionId, {log: `   VIN ${vin}: на сьогодні полісу немає`, logType: 'dim'});
+                pushProgress(sessionId, { log: `   VIN ${vin}: на сьогодні полісу немає`, logType: 'dim' });
                 return null;
             }
             const sorted = allPols.slice().sort((a, b) => (b.end || '').localeCompare(a.end || ''));
@@ -2249,7 +2251,7 @@
             prevPolicy = prevPol ? prevPol.policyNo : '';
             const fullStart = uaFullDate(current.start);
             if (fullStart) {
-                pushProgress(sessionId, {log: `   VIN ${vin}: № ${P0}, початок ${fullStart} (з діапазону)`, logType: 'dim'});
+                pushProgress(sessionId, { log: `   VIN ${vin}: № ${P0}, початок ${fullStart} (з діапазону)`, logType: 'dim' });
                 return { startDate: fullStart, startDateRaw: new Date(current.start), policyNum: P0, endDate, prevPolicy };
             }
         }
@@ -2274,14 +2276,14 @@
             const prevEndDate = new Date(knownPrevEnd);
             const d0 = isoDate(prevEndDate);
             const d1 = isoDate(addDaysD(prevEndDate, 1));
-            pushProgress(sessionId, {log: `   VIN ${vin}: № ${P0}, швидка проба [${d0}–${d1}]...`, logType: 'dim'});
+            pushProgress(sessionId, { log: `   VIN ${vin}: № ${P0}, швидка проба [${d0}–${d1}]...`, logType: 'dim' });
             const ins = await dictInsertProbe(ipn, d0, d1, ipn);
             await importToolRun(ipn);
             await sleep(delayRun);
             const fastPols = await tryParseAllForId(extractIdFromInsert(ins), vu, sessionId);
-            const fp0   = fastPols?.find(p => p.policyNo === P0);
+            const fp0 = fastPols?.find(p => p.policyNo === P0);
             const fprev = prevPolicy ? fastPols?.find(p => p.policyNo === prevPolicy) : null;
-            pushProgress(sessionId, {log: `   VIN ${vin} [${d0}–${d1}] → P0:${fp0 ? P0 : '—'} prev:${fprev ? prevPolicy : '—'}`, logType: 'dim'});
+            pushProgress(sessionId, { log: `   VIN ${vin} [${d0}–${d1}] → P0:${fp0 ? P0 : '—'} prev:${fprev ? prevPolicy : '—'}`, logType: 'dim' });
 
             if (fp0) {
                 const fullStart = uaFullDate(fp0.start || '');
@@ -2295,9 +2297,9 @@
             // P0 not in [d0, d1] — gap; narrow lower bound.
             const afterGap = addDaysD(prevEndDate, 2);
             if (afterGap > loD) loD = afterGap;
-            pushProgress(sessionId, {log: `   VIN ${vin}: розрив, пошук [${isoDate(loD)}–${isoDate(hiD)}]...`, logType: 'dim'});
+            pushProgress(sessionId, { log: `   VIN ${vin}: розрив, пошук [${isoDate(loD)}–${isoDate(hiD)}]...`, logType: 'dim' });
         } else {
-            pushProgress(sessionId, {log: `   VIN ${vin}: № ${P0}, пошук [${isoDate(loD)}–${isoDate(hiD)}]...`, logType: 'dim'});
+            pushProgress(sessionId, { log: `   VIN ${vin}: № ${P0}, пошук [${isoDate(loD)}–${isoDate(hiD)}]...`, logType: 'dim' });
         }
 
         // K=4 points parallel search per RUN — speeds up binary search without getting banned.
@@ -2305,26 +2307,26 @@
         while (daysDiffD(loD, hiD) > 1) {
             const span = daysDiffD(loD, hiD);
             const points = Math.min(span - 1, K);
-            
+
             const dates = [];
             for (let i = 1; i <= points; i++) {
                 dates.push(isoDate(addDaysD(loD, Math.floor(span * i / (points + 1)))));
             }
-            
+
             const ids = [];
             for (const d of dates) {
                 const ins = await dictInsertProbe(ipn, d, d, ipn);
                 ids.push(extractIdFromInsert(ins));
                 await sleep(250); // Small pause to avoid rate limit bans
             }
-            
+
             await importToolRun(ipn);
             await sleep(delayRun);
-            
+
             const rList = await tryParseMultipleIds(ipn, vin, ids, sessionId);
-            
+
             let firstTrueIdx = -1;
-            let exactFullStart = ''; 
+            let exactFullStart = '';
             for (let i = 0; i < points; i++) {
                 const pol = rList[i];
                 if (pol && pol.policyNo === P0) {
@@ -2336,16 +2338,16 @@
                     break;
                 }
             }
-            
-            pushProgress(sessionId, {log: `   VIN ${vin} [${span}д]: ${points} проб → ${firstTrueIdx >= 0 ? dates[firstTrueIdx] : '—'}`, logType: 'dim'});
-            
+
+            pushProgress(sessionId, { log: `   VIN ${vin} [${span}д]: ${points} проб → ${firstTrueIdx >= 0 ? dates[firstTrueIdx] : '—'}`, logType: 'dim' });
+
             if (exactFullStart) {
                 const parts = exactFullStart.split('.');
                 const res = { startDate: exactFullStart, startDateRaw: new Date(`${parts[2]}-${parts[1]}-${parts[0]}`), policyNum: P0, endDate };
                 if (prevPolicy) res.prevPolicy = prevPolicy;
                 return res;
             }
-            
+
             if (firstTrueIdx === -1) {
                 loD = new Date(dates[points - 1]);
             } else if (firstTrueIdx === 0) {
@@ -2379,7 +2381,7 @@
                         }
                         if (found.size > 0) return found;
                     }
-                } catch(e) {}
+                } catch (e) { }
             }
             await sleep(600);
         }
@@ -2401,7 +2403,7 @@
                 if (!Array.isArray(parsed.oscpv) || !parsed.oscpv.length) return { policyNo: null };
                 const pol = (vu && parsed.oscpv.find(p => (p.vin || '').toUpperCase() === vu)) || parsed.oscpv[0];
                 return { policyNo: (pol.policy_no || '').toString(), start: pol.start_date || '', end: pol.end_date || '' };
-            } catch(e) { return null; }
+            } catch (e) { return null; }
         };
 
         const applyRows = (allRows, pending, results) => {
@@ -2425,7 +2427,7 @@
                     applyRows(allRows, pending, results);
                     if (ids.every(id => results.has(id))) break;
                 }
-            } catch(e) { console.log('[OSCPV] direct fetch err:', e.message); }
+            } catch (e) { console.log('[OSCPV] direct fetch err:', e.message); }
             if (!directWorked) break; // URL не знайдено — одразу до iframe
             if (attempt < 6) await sleep(ATTEMPT_DELAY);
         }
@@ -2485,12 +2487,12 @@
                 if (!Array.isArray(parsed.oscpv) || !parsed.oscpv.length) return [];
                 const all = parsed.oscpv.map(p => ({
                     policyNo: (p.policy_no || '').toString(),
-                    start:    p.start_date || '',
-                    end:      p.end_date   || '',
-                    vin:      (p.vin || '').toUpperCase()
+                    start: p.start_date || '',
+                    end: p.end_date || '',
+                    vin: (p.vin || '').toUpperCase()
                 }));
                 return vu ? all.filter(p => !p.vin || p.vin === vu) : all;
-            } catch(e) { return null; }
+            } catch (e) { return null; }
         };
 
         // === Рівень 1: прямий запит (немає iframe) ===
@@ -2506,7 +2508,7 @@
                         if (pols !== null) return pols;
                     }
                 }
-            } catch(e) { console.log('[OSCPV] direct fetch err:', e.message); }
+            } catch (e) { console.log('[OSCPV] direct fetch err:', e.message); }
             if (!directWorked) break;
             if (attempt < 6) await sleep(ATTEMPT_DELAY);
         }
@@ -2705,23 +2707,23 @@
                         if (row?.resp) {
                             try {
                                 const parsed = JSON.parse(row.resp);
-                                if (sessionId) pushProgress(sessionId, {log: `   ✓ id=${expectedId} знайдено`, logType: 'ok'});
+                                if (sessionId) pushProgress(sessionId, { log: `   ✓ id=${expectedId} знайдено`, logType: 'ok' });
                                 return parsed;
-                            } catch(e) {
-                                if (sessionId) pushProgress(sessionId, {log: `   ⚠ response не JSON`, logType: 'err'});
+                            } catch (e) {
+                                if (sessionId) pushProgress(sessionId, { log: `   ⚠ response не JSON`, logType: 'err' });
                                 return null;
                             }
                         }
                         if (sessionId) pushProgress(sessionId, {
                             log: row ? `   id=${expectedId} є, resp порожній — чекаю...`
-                                     : `   id=${expectedId} ще не з'явився — чекаю...`,
+                                : `   id=${expectedId} ще не з'явився — чекаю...`,
                             logType: 'dim'
                         });
                         if (attempt < MAX_ATTEMPTS) await sleep(ATTEMPT_DELAY);
                         continue;
                     }
                     directKnown = false; // URL not cached yet — fall through to iframe
-                } catch(e) {
+                } catch (e) {
                     directKnown = false;
                 }
             }
@@ -2732,12 +2734,12 @@
             if (result.found && result.responseText) {
                 try {
                     const parsed = JSON.parse(result.responseText);
-                    if (sessionId) pushProgress(sessionId, {log: `   ✓ знайдено id=${result.foundId}`, logType: 'ok'});
+                    if (sessionId) pushProgress(sessionId, { log: `   ✓ знайдено id=${result.foundId}`, logType: 'ok' });
                     return parsed;
-                } catch(e) {
+                } catch (e) {
                     console.warn('[OSCPV] response не JSON:', result.responseText.slice(0, 300));
                     if (sessionId) pushProgress(sessionId, {
-                        log: `   ⚠ response не JSON: ${result.responseText.slice(0,80)}...`,
+                        log: `   ⚠ response не JSON: ${result.responseText.slice(0, 80)}...`,
                         logType: 'err'
                     });
                     return null;
@@ -2745,9 +2747,9 @@
             }
 
             if (result.found && !result.responseText) {
-                if (sessionId) pushProgress(sessionId, {log: `   рядок id=${result.foundId} є, але response ще порожній — чекаю...`, logType: 'dim'});
+                if (sessionId) pushProgress(sessionId, { log: `   рядок id=${result.foundId} є, але response ще порожній — чекаю...`, logType: 'dim' });
             } else if (!result.found) {
-                if (sessionId) pushProgress(sessionId, {log: `   рядок з id=${expectedId} ще не з'явився — чекаю...`, logType: 'dim'});
+                if (sessionId) pushProgress(sessionId, { log: `   рядок з id=${expectedId} ще не з'явився — чекаю...`, logType: 'dim' });
             }
 
             if (attempt < MAX_ATTEMPTS) await sleep(ATTEMPT_DELAY);
@@ -2845,7 +2847,7 @@
             });
             console.log('[OSCPV] Клік на сортування ASC виконано');
             return true;
-        } catch(e) {
+        } catch (e) {
             console.warn('[OSCPV] Помилка кліку на сортування:', e);
             return false;
         }
@@ -2860,14 +2862,14 @@
                 try {
                     const doc = iframe.contentDocument || iframe.contentWindow.document;
                     rows = Array.from(doc.querySelectorAll('tr.el-table__row'));
-                } catch(e) { /* ще не готовий */ }
+                } catch (e) { /* ще не готовий */ }
 
                 if (rows.length > 0) {
                     setTimeout(() => {
                         try {
                             const doc = iframe.contentDocument || iframe.contentWindow.document;
                             resolve(Array.from(doc.querySelectorAll('tr.el-table__row')));
-                        } catch(e) { resolve([]); }
+                        } catch (e) { resolve([]); }
                     }, 800);
                     return;
                 }
