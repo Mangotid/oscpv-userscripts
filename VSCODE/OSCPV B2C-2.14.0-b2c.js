@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         OSCPV B2C — Пошук полісів (Odoo + Universalna)
 // @namespace    universalna.oscpv.b2c
-// @version      2.14.1-b2c
+// @version      2.14.2-b2c
 // @description  B2C: ОСЦПВ через incore.universalna.com + дані авто (carplates) + дата початку полісу
 // @author       Universalna Baza
 // @match        https://odoo.icu.int/*
