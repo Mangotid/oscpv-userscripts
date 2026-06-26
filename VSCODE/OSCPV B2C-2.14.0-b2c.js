@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         OSCPV B2C — Пошук полісів (Odoo + Universalna)
 // @namespace    universalna.oscpv.b2c
-// @version      2.16.1-b2c
+// @version      2.16.2-b2c
 // @description  B2C: ОСЦПВ через incore.universalna.com + дані авто (OpenDataUA) + дата початку полісу
 // @author       Universalna Baza
 // @match        https://odoo.icu.int/*
@@ -423,41 +423,43 @@
                             </div>
                         </div>
 
-                        <label class="oscpv-toggle">
-                            <input type="checkbox" id="oscpv-carplates-enable" checked>
-                            <span class="oscpv-toggle-slider"></span>
-                            <span class="oscpv-toggle-text">
-                                <span style="display:flex;align-items:center;gap:6px">
-                                    <span id="oscpv-vehicle-service-label" style="flex:1">Збагачувати дані авто (OpenDataUA)</span>
-                                    <button type="button" class="oscpv-api-settings-btn" id="oscpv-vehicle-settings-btn" title="Налаштування API авто">
-                                        <svg viewBox="0 0 16 16" fill="none" width="12" height="12" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="8" r="2.5"/><path d="M8 1v2M8 13v2M1 8h2M13 8h2M3.22 3.22l1.42 1.42M11.36 11.36l1.42 1.42M3.22 12.78l1.42-1.42M11.36 4.64l1.42-1.42"/></svg>
-                                    </button>
+                        <div class="oscpv-toggle-wrap">
+                            <label class="oscpv-toggle">
+                                <input type="checkbox" id="oscpv-carplates-enable" checked>
+                                <span class="oscpv-toggle-slider"></span>
+                                <span class="oscpv-toggle-text">
+                                    <span style="display:flex;align-items:center;gap:6px">
+                                        <span id="oscpv-vehicle-service-label">Збагачувати дані авто (OpenDataUA)</span>
+                                        <button type="button" class="oscpv-api-settings-btn" id="oscpv-vehicle-settings-btn" title="Налаштування API авто">
+                                            <svg viewBox="0 0 16 16" fill="none" width="12" height="12" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="8" r="2.5"/><path d="M8 1v2M8 13v2M1 8h2M13 8h2M3.22 3.22l1.42 1.42M11.36 11.36l1.42 1.42M3.22 12.78l1.42-1.42M11.36 4.64l1.42-1.42"/></svg>
+                                        </button>
+                                    </span>
+                                    <span class="oscpv-toggle-hint">Додає марку, модель, рік, паливо, об'єм двигуна, масу, місць, регіон</span>
                                 </span>
-                                <span class="oscpv-toggle-hint">Додає марку, модель, рік, паливо, об'єм двигуна, масу, місць, регіон</span>
-                                <div id="oscpv-vehicle-settings-panel" class="oscpv-api-settings-panel" style="display:none">
-                                    <div class="oscpv-api-settings-row">
-                                        <span class="oscpv-api-settings-label">Сервіс</span>
-                                        <select id="oscpv-vehicle-service-select">
-                                            <option value="opendata">OpenDataUA (власний)</option>
-                                            <option value="carplates">carplates.app</option>
-                                            <option value="custom">Власний URL</option>
-                                        </select>
-                                    </div>
-                                    <div class="oscpv-api-settings-row" id="oscpv-vehicle-url-row" style="display:none">
-                                        <span class="oscpv-api-settings-label">URL</span>
-                                        <input type="text" id="oscpv-vehicle-url-input" placeholder="https://opendata.universalnabaza.com.ua">
-                                    </div>
-                                    <div class="oscpv-api-settings-row">
-                                        <span class="oscpv-api-settings-label">API ключ</span>
-                                        <input type="password" id="oscpv-vehicle-key-input" placeholder="odua_xxx... або DEMOdemo...">
-                                    </div>
-                                    <div style="display:flex;gap:6px;justify-content:flex-end;margin-top:4px">
-                                        <button type="button" class="oscpv-btn oscpv-btn-secondary" id="oscpv-vehicle-settings-cancel" style="font-size:11px;padding:4px 10px">СКАСУВАТИ</button>
-                                        <button type="button" class="oscpv-btn" id="oscpv-vehicle-settings-save" style="font-size:11px;padding:4px 10px">ЗБЕРЕГТИ</button>
-                                    </div>
+                            </label>
+                            <div id="oscpv-vehicle-settings-panel" class="oscpv-api-settings-panel" style="display:none">
+                                <div class="oscpv-api-settings-row">
+                                    <span class="oscpv-api-settings-label">Сервіс</span>
+                                    <select id="oscpv-vehicle-service-select">
+                                        <option value="opendata">OpenDataUA (власний)</option>
+                                        <option value="carplates">carplates.app</option>
+                                        <option value="custom">Власний URL</option>
+                                    </select>
                                 </div>
-                            </span>
-                        </label>
+                                <div class="oscpv-api-settings-row" id="oscpv-vehicle-url-row" style="display:none">
+                                    <span class="oscpv-api-settings-label">URL</span>
+                                    <input type="text" id="oscpv-vehicle-url-input" placeholder="https://opendata.universalnabaza.com.ua">
+                                </div>
+                                <div class="oscpv-api-settings-row">
+                                    <span class="oscpv-api-settings-label">API ключ</span>
+                                    <input type="password" id="oscpv-vehicle-key-input" placeholder="odua_xxx... або DEMOdemo...">
+                                </div>
+                                <div style="display:flex;gap:6px;justify-content:flex-end;margin-top:4px">
+                                    <button type="button" class="oscpv-btn oscpv-btn-secondary" id="oscpv-vehicle-settings-cancel" style="font-size:11px;padding:4px 10px">СКАСУВАТИ</button>
+                                    <button type="button" class="oscpv-btn" id="oscpv-vehicle-settings-save" style="font-size:11px;padding:4px 10px">ЗБЕРЕГТИ</button>
+                                </div>
+                            </div>
+                        </div>
 
                         <label class="oscpv-toggle">
                             <input type="checkbox" id="oscpv-mtsbu-enable">
@@ -955,7 +957,7 @@
             /* TOGGLE */
             #oscpv-modal .oscpv-api-settings-btn { background:none; border:1px solid rgba(7,44,44,.15); border-radius:6px; color:var(--color-primary); cursor:pointer; padding:3px 5px; display:inline-flex; align-items:center; flex-shrink:0; opacity:.65; transition:opacity 180ms cubic-bezier(.4,0,.2,1),background 180ms; }
             #oscpv-modal .oscpv-api-settings-btn:hover { opacity:1; background:rgba(7,44,44,.06); }
-            #oscpv-modal .oscpv-api-settings-panel { background:rgba(7,44,44,.04); border:1px solid rgba(7,44,44,.12); border-radius:8px; padding:10px 12px; flex-direction:column; gap:8px; margin-top:8px; width:100%; box-sizing:border-box; }
+            #oscpv-modal .oscpv-api-settings-panel { background:rgba(7,44,44,.04); border:1px solid rgba(7,44,44,.12); border-radius:8px; padding:10px 12px; display:flex; flex-direction:column; gap:8px; margin-top:8px; width:100%; box-sizing:border-box; }
             #oscpv-modal .oscpv-api-settings-row { display:flex; gap:8px; align-items:center; }
             #oscpv-modal .oscpv-api-settings-label { font-size:10px; font-family:'Ubuntu',sans-serif; color:rgba(7,44,44,.55); letter-spacing:.05em; text-transform:uppercase; min-width:56px; flex-shrink:0; }
             #oscpv-modal .oscpv-api-settings-panel select,
@@ -963,12 +965,14 @@
             #oscpv-modal .oscpv-api-settings-panel input[type="password"] { font-family:'Ubuntu Mono',monospace; font-size:12px; border:1px solid rgba(7,44,44,.18); border-radius:6px; padding:5px 8px; background:#fff; color:var(--color-primary); width:100%; box-sizing:border-box; outline:none; transition:border-color 180ms; }
             #oscpv-modal .oscpv-api-settings-panel select:focus,
             #oscpv-modal .oscpv-api-settings-panel input:focus { border-color:var(--color-secondary); }
-            #oscpv-modal .oscpv-toggle { display: flex; align-items: flex-start; gap: 10px;
-                margin-top: 12px; padding: 10px 12px;
+            #oscpv-modal .oscpv-toggle-wrap { margin-top: 12px; padding: 10px 12px;
                 background: var(--color-surface-2); border: 1px solid var(--color-border);
-                border-radius: var(--radius-md); cursor: pointer;
-                transition: all var(--duration) var(--ease); }
-            #oscpv-modal .oscpv-toggle:hover { background: var(--color-surface); }
+                border-radius: var(--radius-md);
+                transition: background var(--duration) var(--ease); }
+            #oscpv-modal .oscpv-toggle-wrap:focus-within { background: var(--color-surface); }
+            #oscpv-modal .oscpv-toggle { display: flex; align-items: flex-start; gap: 10px;
+                cursor: pointer; width: 100%; }
+            #oscpv-modal .oscpv-toggle:hover .oscpv-toggle-text { color: var(--color-primary); }
             #oscpv-modal .oscpv-toggle input { position: absolute; opacity: 0; pointer-events: none; }
             #oscpv-modal .oscpv-toggle-slider { width: 36px; height: 20px;
                 background: var(--color-border); border-radius: 99px;
@@ -980,7 +984,7 @@
             #oscpv-modal .oscpv-toggle input:checked + .oscpv-toggle-slider { background: var(--color-secondary); }
             #oscpv-modal .oscpv-toggle input:checked + .oscpv-toggle-slider::after { transform: translateX(16px); }
             #oscpv-modal .oscpv-toggle-text { display: flex; flex-direction: column;
-                gap: 2px; font-size: 13px; color: var(--color-text); font-weight: 500; }
+                flex: 1; gap: 2px; font-size: 13px; color: var(--color-text); font-weight: 500; }
             #oscpv-modal .oscpv-toggle-hint { font-size: 11px; color: var(--color-text-muted); font-weight: 400; }
 
             /* COPY BUTTON */
