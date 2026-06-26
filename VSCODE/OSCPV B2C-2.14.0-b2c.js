@@ -1194,6 +1194,21 @@
                         const json = JSON.parse(resp.responseText);
                         if (!json.success || !json.data) { resolve(null); return; }
                         const d = json.data;
+                        let calc_category = '';
+                        if (d.total_weight && d.own_weight) {
+                            const total = parseInt(d.total_weight, 10);
+                            const own = parseInt(d.own_weight, 10);
+                            if (!isNaN(total) && !isNaN(own)) {
+                                const payload = total - own;
+                                if (total <= 2400 && payload <= 2000) {
+                                    calc_category = 'C0';
+                                } else if (total > 2400 && total <= 7500 && payload <= 2000) {
+                                    calc_category = 'C1';
+                                } else if (total > 7500 || payload > 2000) {
+                                    calc_category = 'C2';
+                                }
+                            }
+                        }
                         resolve({
                             brand:    d.brand      || '',
                             model:    d.model      || '',
@@ -1201,12 +1216,14 @@
                             fuel:     d.fuel       || '',
                             engine:   d.capacity   ? d.capacity + ' см³' : '',
                             weight:   d.own_weight ? d.own_weight + ' кг' : '',
+                            total_weight: d.total_weight ? d.total_weight + ' кг' : '',
                             seats:    d.seating    ? String(d.seating) : '',
                             region:   d.region     || '',
                             color:    d.color      || '',
                             vin:      d.vin        || '',
                             body:     d.body       || '',
-                            category: d.category   || ''
+                            category: d.category   || '',
+                            calc_category: calc_category
                         });
                     } catch(e) { resolve(null); }
                 },
@@ -1272,6 +1289,8 @@
                 results[rowIdx].cp_fuel     = data.fuel     || '';
                 results[rowIdx].cp_engine   = data.engine   || '';
                 results[rowIdx].cp_weight   = data.weight   || '';
+                results[rowIdx].cp_total_weight = data.total_weight || '';
+                results[rowIdx].cp_calc_cat = data.calc_category || '';
                 results[rowIdx].cp_seats    = data.seats    || '';
                 results[rowIdx].cp_region   = data.region   || '';
                 results[rowIdx].cp_color    = data.color    || '';
@@ -1314,6 +1333,8 @@
         if (d.color)  lines.push(`Колір: ${d.color}`);
         if (engine)   lines.push(`Двигун: ${engine}`);
         if (d.weight) lines.push(`Маса: ${d.weight}`);
+        if (d.total_weight) lines.push(`Повна маса: ${d.total_weight}`);
+        if (d.calc_category) lines.push(`Розрахована категорія: ${d.calc_category}`);
         if (d.seats)  lines.push(`Місць: ${d.seats}`);
         if (d.region) lines.push(`Регіон: ${d.region}`);
         if (d.vin)    lines.push(`VIN: ${d.vin}`);
@@ -1334,6 +1355,7 @@
         const text = buildClipboardText({
             brand: r.cp_brand, model: r.cp_model, year: r.cp_year,
             fuel: r.cp_fuel, engine: r.cp_engine, weight: r.cp_weight,
+            total_weight: r.cp_total_weight, calc_category: r.cp_calc_cat,
             seats: r.cp_seats, region: r.cp_region,
             color: r.cp_color || '', vin: r.cp_vin || ''
         });

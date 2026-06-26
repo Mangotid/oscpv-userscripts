@@ -48,8 +48,8 @@
     // group: ID табу для групування
     const VEHICLE_GROUPS = [
         { id: 'all',      label: 'Всі',         emoji: '',     codes: null },
-        { id: 'truck',    label: 'Вантажні',    emoji: '🚛',   codes: ['C1', 'C2'] },
-        { id: 'agro',     label: 'Сільгосп',    emoji: '🚜',   codes: ['G', 'H'] },
+        { id: 'truck',    label: 'Вантажні',    emoji: '🚛',   codes: ['C0', 'C1', 'C2'] },
+        { id: 'agro',     label: 'Сільгосп',    emoji: '🚜',   codes: ['G', 'G1', 'G2', 'G3', 'H', 'H1', 'H2', 'H3'] },
         { id: 'car',      label: 'Легкові',     emoji: '🚗',   codes: ['B1', 'B2', 'B3', 'B4', 'B5'] },
         { id: 'bus',      label: 'Автобуси',    emoji: '🚌',   codes: ['D1', 'D2'] },
         { id: 'moto',     label: 'Мото',        emoji: '🏍️',  codes: ['A1', 'A2'] },
@@ -1136,6 +1136,21 @@
                         const json = JSON.parse(resp.responseText);
                         if (!json.success || !json.data) { resolve(null); return; }
                         const d = json.data;
+                        let calc_category = '';
+                        if (d.total_weight && d.own_weight) {
+                            const total = parseInt(d.total_weight, 10);
+                            const own = parseInt(d.own_weight, 10);
+                            if (!isNaN(total) && !isNaN(own)) {
+                                const payload = total - own;
+                                if (total <= 2400 && payload <= 2000) {
+                                    calc_category = 'C0';
+                                } else if (total > 2400 && total <= 7500 && payload <= 2000) {
+                                    calc_category = 'C1';
+                                } else if (total > 7500 || payload > 2000) {
+                                    calc_category = 'C2';
+                                }
+                            }
+                        }
                         resolve({
                             brand:    d.brand      || '',
                             model:    d.model      || '',
@@ -1143,12 +1158,14 @@
                             fuel:     d.fuel       || '',
                             engine:   d.capacity   ? d.capacity + ' см³' : '',
                             weight:   d.own_weight ? d.own_weight + ' кг' : '',
+                            total_weight: d.total_weight ? d.total_weight + ' кг' : '',
                             seats:    d.seating    ? String(d.seating) : '',
                             region:   d.region     || '',
                             color:    d.color      || '',
                             vin:      d.vin        || '',
                             body:     d.body       || '',
-                            category: d.category   || ''
+                            category: d.category   || '',
+                            calc_category: calc_category
                         });
                     } catch(e) { resolve(null); }
                 },
@@ -1184,6 +1201,8 @@
                             data.fuel ? `Пальне: ${data.fuel}` : '',
                             data.engine ? `Двигун: ${data.engine}` : '',
                             data.weight ? `Маса: ${data.weight}` : '',
+                            data.total_weight ? `Повна маса: ${data.total_weight}` : '',
+                            data.calc_category ? `Розрахована категорія: ${data.calc_category}` : '',
                             data.region ? `Регіон: ${data.region}` : '',
                             data.vin ? `VIN: ${data.vin}` : ''
                         ].filter(Boolean).join('\n');
