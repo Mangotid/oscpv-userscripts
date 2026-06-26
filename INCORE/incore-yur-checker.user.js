@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         INCORE — Масова перевірка ЮР осіб
 // @namespace    https://incore.universalna.com/
-// @version      1.2.0
+// @version      1.3.0
 // @description  Перевіряє список ЮО за ЄДРПОУ: чи є в INCORE та чи є поліси (НАШ / НЕ НАШ)
 // @author       Oleg Volokhovskyi
 // @match        https://incore.universalna.com/*
@@ -71,11 +71,10 @@
   }
 
   // ── API ────────────────────────────────────────────────────────────────────
-  const PAGE_ID = (crypto.randomUUID || (() =>
-    'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => {
-      const r = Math.random() * 16 | 0;
-      return (c === 'x' ? r : (r & 0x3 | 0x8)).toString(16);
-    })))();
+  const PAGE_ID = 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => {
+    const r = Math.random() * 16 | 0;
+    return (c === 'x' ? r : (r & 0x3 | 0x8)).toString(16);
+  });
 
   function apiHeaders(token) {
     const h = {
