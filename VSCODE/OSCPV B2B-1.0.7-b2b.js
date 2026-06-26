@@ -18,7 +18,7 @@
 // @connect      import-tool.universalna.com
 // @connect      dict.universalna.com
 // @connect      incore.universalna.com
-// @connect      api.carplates.app
+// @connect      opendata.universalnabaza.com.ua
 // @run-at       document-start
 // ==/UserScript==
 
@@ -469,7 +469,7 @@
                                     <span class="oscpv2-results-num" id="oscpv2-results-num">0</span>
                                     <span class="oscpv2-results-label" id="oscpv2-results-label">полісів</span>
                                 </div>
-                                <button type="button" class="oscpv2-btn" id="oscpv2-enrich-btn" title="Збагатити дані авто через carplates.app gov-registration API" style="font-size:11px;padding:6px 10px" disabled>
+                                <button type="button" class="oscpv2-btn" id="oscpv2-enrich-btn" title="Збагатити дані авто через OpenDataUA API" style="font-size:11px;padding:6px 10px" disabled>
                                     <svg viewBox="0 0 20 20" fill="none" width="13" height="13" aria-hidden="true">
                                         <path d="M4 10a6 6 0 0 1 6-6 6 6 0 0 1 4.24 1.76" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
                                         <path d="M14 5V2M14 5h-3" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
@@ -1117,34 +1117,25 @@
 
     // ====== Carplates gov-registration API ======
 
-    function getCarplatesApiKey() {
-        let key = GM_getValue('oscpv_cp_api_key', '');
-        if (!key) {
-            key = (prompt('Введіть API ключ carplates.app (gov-registration):\nhttps://carplates.app/api') || '').trim();
-            if (key) GM_setValue('oscpv_cp_api_key', key);
-        }
-        return key;
+    function getOduaApiKey() {
+        return GM_getValue('oscpv_odua_api_key', 'odua_282fZnAy4m2_-cNCrX41qVW57cJLttwiS4P4pXU5yzI');
     }
 
-    function fetchGovRegistration(plate) {
+    function fetchPlateData(plate) {
         return new Promise(resolve => {
-            const apiKey = getCarplatesApiKey();
+            const apiKey = getOduaApiKey();
             if (!apiKey) { resolve(null); return; }
             GM_xmlhttpRequest({
-                method: 'POST',
-                url: 'https://api.carplates.app/ua/gov-registration',
-                headers: {
-                    'X-Locale': 'uk',
-                    'X-API-Key': apiKey,
-                    'Content-Type': 'application/json'
-                },
-                data: JSON.stringify({ number: plate }),
+                method: 'GET',
+                url: 'https://opendata.universalnabaza.com.ua/api/v1/cars/plate/' + encodeURIComponent(plate),
+                headers: { 'X-Api-Key': apiKey },
                 timeout: 10000,
                 onload: resp => {
                     try {
+                        if (resp.status === 404) { resolve(null); return; }
                         const json = JSON.parse(resp.responseText);
-                        if (!json.success || !json.data) { resolve(null); return; }
-                        const d = json.data;
+                        if (!json.records || !json.records.length) { resolve(null); return; }
+                        const d = json.records[0];
                         let calc_category = '';
                         if (d.total_weight && d.own_weight) {
                             const total = parseInt(d.total_weight, 10);
@@ -1163,17 +1154,16 @@
                         resolve({
                             brand: d.brand || '',
                             model: d.model || '',
-                            year: d.make_year ? String(d.make_year) : '',
-                            fuel: d.fuel || '',
-                            engine: d.capacity ? d.capacity + ' см³' : '',
-                            weight: d.own_weight ? d.own_weight + ' кг' : '',
-                            total_weight: d.total_weight ? d.total_weight + ' кг' : '',
-                            seats: d.seating ? String(d.seating) : '',
+                            year: d.year ? String(d.year) : '',
+                            fuel: d.fuel_type || '',
+                            engine: d.engine_volume ? d.engine_volume + '\xa0см³' : '',
+                            weight: d.own_weight ? d.own_weight + '\xa0кг' : '',
+                            total_weight: d.total_weight ? d.total_weight + '\xa0кг' : '',
                             region: d.region || '',
                             color: d.color || '',
                             vin: d.vin || '',
-                            body: d.body || '',
-                            category: d.category || '',
+                            body: d.body_type || '',
+                            body_detail: d.body_detail || '',
                             calc_category: calc_category
                         });
                     } catch (e) { resolve(null); }
@@ -1188,40 +1178,94 @@
         const btn = document.getElementById('oscpv2-enrich-btn');
         if (btn) { btn.disabled = true; btn.textContent = '...'; }
 
-        const allRows = document.querySelectorAll('tr[data-row-idx]');
-        let done = 0, enriched = 0;
-
+        const allRows = Array.from(document.querySelectorAll('tr[data-row-idx]'));
+        const plates = [];
         for (const tr of allRows) {
-            const rowIdx = parseInt(tr.dataset.rowIdx);
             const plateEl = tr.querySelector('.oscpv2-car-plate');
-            if (!plateEl) { done++; continue; }
-            const plate = plateEl.textContent.trim();
-            if (!plate) { done++; continue; }
+            const plate = plateEl ? plateEl.textContent.trim() : '';
+            plates.push(plate);
+        }
+        const uniquePlates = [...new Set(plates.filter(Boolean))];
 
-            try {
-                const data = await fetchGovRegistration(plate);
-                if (data && data.brand) {
-                    const brandEl = tr.querySelector('.oscpv2-car-brand');
-                    if (brandEl) {
-                        const brandModel = [data.brand, data.model, data.year ? `(${data.year})` : ''].filter(Boolean).join(' ');
-                        brandEl.textContent = brandModel;
-                        brandEl.title = [
-                            data.color ? `Колір: ${data.color}` : '',
-                            data.fuel ? `Пальне: ${data.fuel}` : '',
-                            data.engine ? `Двигун: ${data.engine}` : '',
-                            data.weight ? `Маса: ${data.weight}` : '',
-                            data.total_weight ? `Повна маса: ${data.total_weight}` : '',
-                            data.calc_category ? `Розрахована категорія: ${data.calc_category}` : '',
-                            data.region ? `Регіон: ${data.region}` : '',
-                            data.vin ? `VIN: ${data.vin}` : ''
-                        ].filter(Boolean).join('\n');
-                    }
-                    enriched++;
-                }
-            } catch (e) { /* skip */ }
-            done++;
-            if (btn) btn.textContent = `${done}/${allRows.length}`;
-            await sleep(150);
+        const apiKey = getOduaApiKey();
+        if (!apiKey) {
+            if (btn) { btn.disabled = false; btn.textContent = 'ЗБАГАТИТИ АВТО'; }
+            return;
+        }
+
+        const resultMap = {};
+        const BATCH = 100;
+        for (let i = 0; i < uniquePlates.length; i += BATCH) {
+            const chunk = uniquePlates.slice(i, i + BATCH);
+            await new Promise(resolve => {
+                GM_xmlhttpRequest({
+                    method: 'POST',
+                    url: 'https://opendata.universalnabaza.com.ua/api/v1/cars/lookup',
+                    headers: { 'X-Api-Key': apiKey, 'Content-Type': 'application/json' },
+                    data: JSON.stringify({ identifiers: chunk }),
+                    timeout: 30000,
+                    onload: resp => {
+                        try {
+                            const json = JSON.parse(resp.responseText);
+                            if (json.results) {
+                                for (const r of json.results) {
+                                    if (!r.found) continue;
+                                    let calc_category = '';
+                                    if (r.total_weight && r.own_weight) {
+                                        const total = parseInt(r.total_weight, 10);
+                                        const own = parseInt(r.own_weight, 10);
+                                        if (!isNaN(total) && !isNaN(own)) {
+                                            const p = total - own;
+                                            if (total <= 2400 && p <= 2000) calc_category = 'C0';
+                                            else if (total > 2400 && total <= 7500 && p <= 2000) calc_category = 'C1';
+                                            else if (total > 7500 || p > 2000) calc_category = 'C2';
+                                        }
+                                    }
+                                    resultMap[r.query] = {
+                                        brand: r.brand || '', model: r.model || '',
+                                        year: r.year ? String(r.year) : '',
+                                        fuel: r.fuel_type || '',
+                                        engine: r.engine_volume ? r.engine_volume + '\xa0см³' : '',
+                                        weight: r.own_weight ? r.own_weight + '\xa0кг' : '',
+                                        total_weight: r.total_weight ? r.total_weight + '\xa0кг' : '',
+                                        region: r.region || '', color: r.color || '',
+                                        vin: r.vin || '', body: r.body_type || '',
+                                        calc_category
+                                    };
+                                }
+                            }
+                        } catch (e) { /* skip */ }
+                        resolve();
+                    },
+                    onerror: () => resolve(),
+                    ontimeout: () => resolve()
+                });
+            });
+            if (btn) btn.textContent = `${Math.min(i + BATCH, uniquePlates.length)}/${uniquePlates.length}`;
+        }
+
+        let enriched = 0;
+        for (const tr of allRows) {
+            const plateEl = tr.querySelector('.oscpv2-car-plate');
+            if (!plateEl) continue;
+            const plate = plateEl.textContent.trim();
+            const data = resultMap[plate];
+            if (!data || !data.brand) continue;
+            const brandEl = tr.querySelector('.oscpv2-car-brand');
+            if (brandEl) {
+                brandEl.textContent = [data.brand, data.model, data.year ? `(${data.year})` : ''].filter(Boolean).join(' ');
+                brandEl.title = [
+                    data.color ? `Колір: ${data.color}` : '',
+                    data.fuel ? `Пальне: ${data.fuel}` : '',
+                    data.engine ? `Двигун: ${data.engine}` : '',
+                    data.weight ? `Маса: ${data.weight}` : '',
+                    data.total_weight ? `Повна маса: ${data.total_weight}` : '',
+                    data.calc_category ? `Категорія: ${data.calc_category}` : '',
+                    data.region ? `Регіон: ${data.region}` : '',
+                    data.vin ? `VIN: ${data.vin}` : ''
+                ].filter(Boolean).join('\n');
+            }
+            enriched++;
         }
 
         if (btn) {
@@ -1231,7 +1275,7 @@
         }
     }
 
-    async function startBatch() {
+        async function startBatch() {
         const ipns = document.getElementById('oscpv2-ipns').value
             .split('\n').map(s => s.trim()).filter(Boolean);
         if (!ipns.length) { alert('Введіть хоча б один ІПН'); return; }

@@ -2,12 +2,11 @@
 // @name         OSCPV B2C — Пошук полісів (Odoo + Universalna)
 // @namespace    universalna.oscpv.b2c
 // @version      2.14.2-b2c
-// @description  B2C: ОСЦПВ через incore.universalna.com + дані авто (carplates) + дата початку полісу
+// @description  B2C: ОСЦПВ через incore.universalna.com + дані авто (OpenDataUA) + дата початку полісу
 // @author       Universalna Baza
 // @match        https://odoo.icu.int/*
 // @match        https://odoo.universalna.com/*
 // @match        https://dict.universalna.com/*
-// @match        https://ua.carplates.app/*
 // @match        https://incore.universalna.com/*
 // @require      https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js
 // @grant        GM_xmlhttpRequest
@@ -20,7 +19,7 @@
 // @connect      import-tool.universalna.com
 // @connect      dict.universalna.com
 // @connect      incore.universalna.com
-// @connect      api.carplates.app
+// @connect      opendata.universalnabaza.com.ua
 // @run-at       document-start
 // ==/UserScript==
 
@@ -39,11 +38,8 @@
         ROW_WAIT_TIMEOUT: 30000,
         ROW_WAIT_INTERVAL: 500,
 
-        // Carplates налаштування
-        CARPLATES_VIN_URL: 'https://ua.carplates.app/vin/',
-        CARPLATES_API_URL: 'https://api.carplates.app/summary',
-        CARPLATES_TIMEOUT: 25000,
-        CARPLATES_DELAY: 800,
+        // OpenDataUA налаштування
+        CARPLATES_DELAY: 200,
 
         // Incore - новий endpoint для генерації звіту
         INCORE_REPORT_GID: '6775b281-c15d-4bba-a238-6c3832843032',
@@ -430,7 +426,7 @@
                             <input type="checkbox" id="oscpv-carplates-enable" checked>
                             <span class="oscpv-toggle-slider"></span>
                             <span class="oscpv-toggle-text">
-                                <span>Парсити дані авто з carplates.app</span>
+                                <span>Збагачувати дані авто (OpenDataUA)</span>
                                 <span class="oscpv-toggle-hint">Додає марку, модель, рік, паливо, об'єм двигуна, масу, місць, регіон</span>
                             </span>
                         </label>
@@ -1166,34 +1162,25 @@
 
     // ====== Carplates gov-registration API ======
 
-    function getCarplatesApiKey() {
-        let key = GM_getValue('oscpv_cp_api_key', '');
-        if (!key) {
-            key = (prompt('Введіть API ключ carplates.app (gov-registration):\nhttps://carplates.app/api') || '').trim();
-            if (key) GM_setValue('oscpv_cp_api_key', key);
-        }
-        return key;
+    function getOduaApiKey() {
+        return GM_getValue('oscpv_odua_api_key', 'odua_282fZnAy4m2_-cNCrX41qVW57cJLttwiS4P4pXU5yzI');
     }
 
-    function fetchGovRegistration(plate) {
+    function fetchPlateData(plate) {
         return new Promise(resolve => {
-            const apiKey = getCarplatesApiKey();
+            const apiKey = getOduaApiKey();
             if (!apiKey) { resolve(null); return; }
             GM_xmlhttpRequest({
-                method: 'POST',
-                url: 'https://api.carplates.app/ua/gov-registration',
-                headers: {
-                    'X-Locale': 'uk',
-                    'X-API-Key': apiKey,
-                    'Content-Type': 'application/json'
-                },
-                data: JSON.stringify({ number: plate }),
+                method: 'GET',
+                url: 'https://opendata.universalnabaza.com.ua/api/v1/cars/plate/' + encodeURIComponent(plate),
+                headers: { 'X-Api-Key': apiKey },
                 timeout: 10000,
                 onload: resp => {
                     try {
+                        if (resp.status === 404) { resolve(null); return; }
                         const json = JSON.parse(resp.responseText);
-                        if (!json.success || !json.data) { resolve(null); return; }
-                        const d = json.data;
+                        if (!json.records || !json.records.length) { resolve(null); return; }
+                        const d = json.records[0];
                         let calc_category = '';
                         if (d.total_weight && d.own_weight) {
                             const total = parseInt(d.total_weight, 10);
@@ -1212,17 +1199,19 @@
                         resolve({
                             brand: d.brand || '',
                             model: d.model || '',
-                            year: d.make_year ? String(d.make_year) : '',
-                            fuel: d.fuel || '',
-                            engine: d.capacity ? d.capacity + ' см³' : '',
+                            year: d.year ? String(d.year) : '',
+                            fuel: d.fuel_type || '',
+                            engine: d.engine_volume ? d.engine_volume + ' см³' : '',
                             weight: d.own_weight ? d.own_weight + ' кг' : '',
                             total_weight: d.total_weight ? d.total_weight + ' кг' : '',
-                            seats: d.seating ? String(d.seating) : '',
+                            seats: d.num_seats ? String(d.num_seats) : '',
                             region: d.region || '',
                             color: d.color || '',
                             vin: d.vin || '',
-                            body: d.body || '',
-                            category: d.category || '',
+                            body: d.body_type || '',
+                            body_detail: d.body_detail || '',
+                            purpose: d.purpose || '',
+                            category: '',
                             calc_category: calc_category
                         });
                     } catch (e) { resolve(null); }
@@ -1260,7 +1249,7 @@
                 log(`carplates: запит ${plate}...`, 'dim');
                 let data = null;
                 try {
-                    data = await fetchGovRegistration(plate);
+                    data = await fetchPlateData(plate);
                     if (data && data.brand) CARPLATES_CACHE.set(plate, data);
                     else data = null;
                 } catch (e) {
