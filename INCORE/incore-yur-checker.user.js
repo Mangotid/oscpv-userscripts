@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         INCORE — Масова перевірка ЮР осіб
 // @namespace    https://incore.universalna.com/
-// @version      1.3.0
+// @version      1.4.0
 // @description  Перевіряє список ЮО за ЄДРПОУ: чи є в INCORE та чи є поліси (НАШ / НЕ НАШ)
 // @author       Oleg Volokhovskyi
 // @match        https://incore.universalna.com/*
@@ -160,6 +160,15 @@
     }, tokenHolder);
   }
 
+  // Must be called before getObjectProducts — establishes server-side session state for the entity.
+  async function getEntity(gid, tokenHolder) {
+    return apiFetchWithRetry('/Entity/GetEntity?lang=uk-UA', {
+      gid,
+      entityType: 'Face',
+      loadEntityCostValues: false,
+    }, tokenHolder);
+  }
+
   async function getObjectProducts(entityGid, tokenHolder) {
     return apiFetchWithRetry('/Grid/GetObjectProducts?lang=uk-UA', {
       _search: false,
@@ -200,12 +209,18 @@
 
     const row = rows[0];
     const gid = row.id;
-    // cell[2] = company name (cell[0]=GID, cell[1]=HTML with ID, cell[2]=name, cell[3]=EDRPOU)
-    result.name = (row.cell && row.cell[2]) ? row.cell[2] : '';
 
-    await sleep(350);
+    await sleep(300);
 
-    // Step 2 — поліси
+    // Step 2 — відкриваємо картку (встановлює серверний стан; також беремо назву)
+    const entityData = await getEntity(gid, tokenHolder);
+    result.name = entityData?.Arguments?.entity?.Face?.Name
+               || entityData?.Arguments?.entity?.Name
+               || (row.cell && row.cell[2]) || '';
+
+    await sleep(300);
+
+    // Step 3 — поліси
     const productsData = await getObjectProducts(gid, tokenHolder);
 
     if (productsData.records > 0 || (productsData.rows && productsData.rows.length > 0)) {
