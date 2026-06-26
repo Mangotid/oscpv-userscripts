@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         OSCPV B2C — Пошук полісів (Odoo + Universalna)
 // @namespace    universalna.oscpv.b2c
-// @version      2.16.2-b2c
+// @version      2.16.3-b2c
 // @description  B2C: ОСЦПВ через incore.universalna.com + дані авто (OpenDataUA) + дата початку полісу
 // @author       Universalna Baza
 // @match        https://odoo.icu.int/*
@@ -428,14 +428,12 @@
                                 <input type="checkbox" id="oscpv-carplates-enable" checked>
                                 <span class="oscpv-toggle-slider"></span>
                                 <span class="oscpv-toggle-text">
-                                    <span style="display:flex;align-items:center;gap:6px">
-                                        <span id="oscpv-vehicle-service-label">Збагачувати дані авто (OpenDataUA)</span>
-                                        <button type="button" class="oscpv-api-settings-btn" id="oscpv-vehicle-settings-btn" title="Налаштування API авто">
-                                            <svg viewBox="0 0 16 16" fill="none" width="12" height="12" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="8" r="2.5"/><path d="M8 1v2M8 13v2M1 8h2M13 8h2M3.22 3.22l1.42 1.42M11.36 11.36l1.42 1.42M3.22 12.78l1.42-1.42M11.36 4.64l1.42-1.42"/></svg>
-                                        </button>
-                                    </span>
+                                    <span id="oscpv-vehicle-service-label">Збагачувати дані авто (OpenDataUA)</span>
                                     <span class="oscpv-toggle-hint">Додає марку, модель, рік, паливо, об'єм двигуна, масу, місць, регіон</span>
                                 </span>
+                                <button type="button" class="oscpv-api-settings-btn" id="oscpv-vehicle-settings-btn" title="Налаштування API авто">
+                                    <svg viewBox="0 0 16 16" fill="none" width="13" height="13" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="8" r="2.5"/><path d="M8 1v2M8 13v2M1 8h2M13 8h2M3.22 3.22l1.42 1.42M11.36 11.36l1.42 1.42M3.22 12.78l1.42-1.42M11.36 4.64l1.42-1.42"/></svg>
+                                </button>
                             </label>
                             <div id="oscpv-vehicle-settings-panel" class="oscpv-api-settings-panel" style="display:none">
                                 <div class="oscpv-api-settings-row">
@@ -461,14 +459,16 @@
                             </div>
                         </div>
 
-                        <label class="oscpv-toggle">
-                            <input type="checkbox" id="oscpv-mtsbu-enable">
-                            <span class="oscpv-toggle-slider"></span>
-                            <span class="oscpv-toggle-text">
-                                <span>Початок полісу</span>
-                                <span class="oscpv-toggle-hint">Бінарний пошук дати початку полісу через dict/import-tool. 1 запит за крок, ~9 кроків на авто.</span>
-                            </span>
-                        </label>
+                        <div class="oscpv-toggle-wrap">
+                            <label class="oscpv-toggle">
+                                <input type="checkbox" id="oscpv-mtsbu-enable">
+                                <span class="oscpv-toggle-slider"></span>
+                                <span class="oscpv-toggle-text">
+                                    <span>Початок полісу</span>
+                                    <span class="oscpv-toggle-hint">Бінарний пошук дати початку полісу через dict/import-tool. 1 запит за крок, ~9 кроків на авто.</span>
+                                </span>
+                            </label>
+                        </div>
                     </div>
 
                     <div class="oscpv-card oscpv-progress-card" id="oscpv-progress-card" style="display:none">
@@ -955,7 +955,7 @@
                 background: rgba(7,44,44,0.08); color: var(--color-primary); border-color: var(--color-border-strong); }
 
             /* TOGGLE */
-            #oscpv-modal .oscpv-api-settings-btn { background:none; border:1px solid rgba(7,44,44,.15); border-radius:6px; color:var(--color-primary); cursor:pointer; padding:3px 5px; display:inline-flex; align-items:center; flex-shrink:0; opacity:.65; transition:opacity 180ms cubic-bezier(.4,0,.2,1),background 180ms; }
+            #oscpv-modal .oscpv-api-settings-btn { background:none; border:1px solid rgba(7,44,44,.15); border-radius:6px; color:var(--color-primary); cursor:pointer; padding:3px 5px; display:inline-flex; align-items:center; flex-shrink:0; opacity:.7; transition:opacity 180ms cubic-bezier(.4,0,.2,1),background 180ms; margin-top:1px; align-self:flex-start; }
             #oscpv-modal .oscpv-api-settings-btn:hover { opacity:1; background:rgba(7,44,44,.06); }
             #oscpv-modal .oscpv-api-settings-panel { background:rgba(7,44,44,.04); border:1px solid rgba(7,44,44,.12); border-radius:8px; padding:10px 12px; display:flex; flex-direction:column; gap:8px; margin-top:8px; width:100%; box-sizing:border-box; }
             #oscpv-modal .oscpv-api-settings-row { display:flex; gap:8px; align-items:center; }
