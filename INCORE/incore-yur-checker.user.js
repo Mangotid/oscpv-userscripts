@@ -7,6 +7,8 @@
 // @match        https://incore.universalna.com/*
 // @grant        GM_addStyle
 // @run-at       document-idle
+// @updateURL    https://raw.githubusercontent.com/Mangotid/oscpv-userscripts/main/INCORE/incore-yur-checker.user.js
+// @downloadURL  https://raw.githubusercontent.com/Mangotid/oscpv-userscripts/main/INCORE/incore-yur-checker.user.js
 // ==/UserScript==
 
 (function () {
