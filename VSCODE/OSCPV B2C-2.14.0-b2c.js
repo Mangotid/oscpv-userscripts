@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         OSCPV B2C — Пошук полісів (Odoo + Universalna)
 // @namespace    universalna.oscpv.b2c
-// @version      2.15.0-b2c
+// @version      2.16.0-b2c
 // @description  B2C: ОСЦПВ через incore.universalna.com + дані авто (OpenDataUA) + дата початку полісу
 // @author       Universalna Baza
 // @match        https://odoo.icu.int/*
@@ -20,6 +20,7 @@
 // @connect      dict.universalna.com
 // @connect      incore.universalna.com
 // @connect      opendata.universalnabaza.com.ua
+// @connect      api.carplates.app
 // @run-at       document-start
 // ==/UserScript==
 
@@ -422,14 +423,41 @@
                             </div>
                         </div>
 
-                        <label class="oscpv-toggle">
-                            <input type="checkbox" id="oscpv-carplates-enable" checked>
-                            <span class="oscpv-toggle-slider"></span>
-                            <span class="oscpv-toggle-text">
-                                <span>Збагачувати дані авто (OpenDataUA)</span>
-                                <span class="oscpv-toggle-hint">Додає марку, модель, рік, паливо, об'єм двигуна, масу, місць, регіон</span>
-                            </span>
-                        </label>
+                        <div style="display:flex;align-items:flex-start;gap:6px">
+                            <label class="oscpv-toggle" style="flex:1">
+                                <input type="checkbox" id="oscpv-carplates-enable" checked>
+                                <span class="oscpv-toggle-slider"></span>
+                                <span class="oscpv-toggle-text">
+                                    <span id="oscpv-vehicle-service-label">Збагачувати дані авто (OpenDataUA)</span>
+                                    <span class="oscpv-toggle-hint">Додає марку, модель, рік, паливо, об'єм двигуна, масу, місць, регіон</span>
+                                </span>
+                            </label>
+                            <button type="button" class="oscpv-api-settings-btn" id="oscpv-vehicle-settings-btn" title="Налаштування API авто">
+                                <svg viewBox="0 0 16 16" fill="none" width="13" height="13" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="8" r="2.5"/><path d="M8 1v2M8 13v2M1 8h2M13 8h2M3.22 3.22l1.42 1.42M11.36 11.36l1.42 1.42M3.22 12.78l1.42-1.42M11.36 4.64l1.42-1.42"/></svg>
+                            </button>
+                        </div>
+                        <div id="oscpv-vehicle-settings-panel" class="oscpv-api-settings-panel" style="display:none">
+                            <div class="oscpv-api-settings-row">
+                                <span class="oscpv-api-settings-label">Сервіс</span>
+                                <select id="oscpv-vehicle-service-select">
+                                    <option value="opendata">OpenDataUA (власний)</option>
+                                    <option value="carplates">carplates.app</option>
+                                    <option value="custom">Власний URL</option>
+                                </select>
+                            </div>
+                            <div class="oscpv-api-settings-row" id="oscpv-vehicle-url-row" style="display:none">
+                                <span class="oscpv-api-settings-label">URL</span>
+                                <input type="text" id="oscpv-vehicle-url-input" placeholder="https://opendata.universalnabaza.com.ua">
+                            </div>
+                            <div class="oscpv-api-settings-row">
+                                <span class="oscpv-api-settings-label">API ключ</span>
+                                <input type="password" id="oscpv-vehicle-key-input" placeholder="odua_xxx... або DEMOdemo...">
+                            </div>
+                            <div style="display:flex;gap:6px;justify-content:flex-end;margin-top:2px">
+                                <button type="button" class="oscpv-btn oscpv-btn-secondary" id="oscpv-vehicle-settings-cancel" style="font-size:11px;padding:4px 10px">СКАСУВАТИ</button>
+                                <button type="button" class="oscpv-btn" id="oscpv-vehicle-settings-save" style="font-size:11px;padding:4px 10px">ЗБЕРЕГТИ</button>
+                            </div>
+                        </div>
 
                         <label class="oscpv-toggle">
                             <input type="checkbox" id="oscpv-mtsbu-enable">
@@ -549,6 +577,48 @@
         modalEl.querySelector('#oscpv-import-odoo').onclick = importToOdoo;
         modalEl.querySelector('#oscpv-auto').onclick = autoFillIpnFromLead;
         modalEl.querySelector('#oscpv-toggle-log').onclick = toggleLog;
+
+        // Vehicle API settings panel
+        (function() {
+            const svcLabel  = modalEl.querySelector('#oscpv-vehicle-service-label');
+            const panel     = modalEl.querySelector('#oscpv-vehicle-settings-panel');
+            const gearBtn   = modalEl.querySelector('#oscpv-vehicle-settings-btn');
+            const svcSel    = modalEl.querySelector('#oscpv-vehicle-service-select');
+            const urlRow    = modalEl.querySelector('#oscpv-vehicle-url-row');
+            const urlInput  = modalEl.querySelector('#oscpv-vehicle-url-input');
+            const keyInput  = modalEl.querySelector('#oscpv-vehicle-key-input');
+            const saveBtn   = modalEl.querySelector('#oscpv-vehicle-settings-save');
+            const cancelBtn = modalEl.querySelector('#oscpv-vehicle-settings-cancel');
+
+            if (svcLabel) svcLabel.textContent = getVehicleServiceLabel();
+
+            if (gearBtn) gearBtn.onclick = e => {
+                e.stopPropagation();
+                const open = panel.style.display !== 'none';
+                panel.style.display = open ? 'none' : 'flex';
+                if (!open) {
+                    const s = getVehicleApiSettings();
+                    svcSel.value    = s.service;
+                    urlInput.value  = s.customUrl;
+                    keyInput.value  = s.apiKey;
+                    urlRow.style.display = s.service === 'custom' ? 'flex' : 'none';
+                }
+            };
+            if (svcSel) svcSel.onchange = function() {
+                urlRow.style.display = this.value === 'custom' ? 'flex' : 'none';
+            };
+            if (saveBtn) saveBtn.onclick = () => {
+                const service = svcSel.value;
+                const url     = urlInput.value.trim();
+                const key     = keyInput.value.trim();
+                GM_setValue('oscpv_vehicle_service', service);
+                GM_setValue('oscpv_vehicle_custom_url', url);
+                if (key) GM_setValue('oscpv_odua_api_key', key);
+                if (svcLabel) svcLabel.textContent = getVehicleServiceLabel();
+                panel.style.display = 'none';
+            };
+            if (cancelBtn) cancelBtn.onclick = () => { panel.style.display = 'none'; };
+        })();
 
         // Лічильник ІПН в textarea
         const ta = modalEl.querySelector('#oscpv-ipns');
@@ -882,6 +952,16 @@
                 background: rgba(7,44,44,0.08); color: var(--color-primary); border-color: var(--color-border-strong); }
 
             /* TOGGLE */
+            #oscpv-modal .oscpv-api-settings-btn { background:none; border:1px solid rgba(7,44,44,.15); border-radius:6px; color:var(--color-primary); cursor:pointer; padding:4px 6px; display:flex; align-items:center; flex-shrink:0; opacity:.65; transition:opacity 180ms cubic-bezier(.4,0,.2,1),background 180ms; margin-top:2px; }
+            #oscpv-modal .oscpv-api-settings-btn:hover { opacity:1; background:rgba(7,44,44,.06); }
+            #oscpv-modal .oscpv-api-settings-panel { background:rgba(7,44,44,.04); border:1px solid rgba(7,44,44,.12); border-radius:8px; padding:10px 12px; flex-direction:column; gap:8px; margin-top:4px; }
+            #oscpv-modal .oscpv-api-settings-row { display:flex; gap:8px; align-items:center; }
+            #oscpv-modal .oscpv-api-settings-label { font-size:10px; font-family:'Ubuntu',sans-serif; color:rgba(7,44,44,.55); letter-spacing:.05em; text-transform:uppercase; min-width:56px; flex-shrink:0; }
+            #oscpv-modal .oscpv-api-settings-panel select,
+            #oscpv-modal .oscpv-api-settings-panel input[type="text"],
+            #oscpv-modal .oscpv-api-settings-panel input[type="password"] { font-family:'Ubuntu Mono',monospace; font-size:12px; border:1px solid rgba(7,44,44,.18); border-radius:6px; padding:5px 8px; background:#fff; color:var(--color-primary); width:100%; box-sizing:border-box; outline:none; transition:border-color 180ms; }
+            #oscpv-modal .oscpv-api-settings-panel select:focus,
+            #oscpv-modal .oscpv-api-settings-panel input:focus { border-color:var(--color-secondary); }
             #oscpv-modal .oscpv-toggle { display: flex; align-items: flex-start; gap: 10px;
                 margin-top: 12px; padding: 10px 12px;
                 background: var(--color-surface-2); border: 1px solid var(--color-border);
@@ -1162,75 +1242,122 @@
         }
     }
 
-    // ====== Carplates gov-registration API ======
+    // ====== Vehicle API settings ======
+
+    const VEHICLE_SERVICES = { opendata: 'OpenDataUA', carplates: 'carplates.app', custom: 'Власний URL' };
+
+    function getVehicleApiSettings() {
+        return {
+            service:   GM_getValue('oscpv_vehicle_service', 'opendata'),
+            customUrl: GM_getValue('oscpv_vehicle_custom_url', ''),
+            apiKey:    GM_getValue('oscpv_odua_api_key', ''),
+        };
+    }
 
     function getOduaApiKey() {
         let key = GM_getValue('oscpv_odua_api_key', '');
         if (!key) {
-            key = (prompt('Введіть API ключ OpenDataUA (odua_xxx...):\nhttps://opendata.universalnabaza.com.ua') || '').trim();
+            key = (prompt('Введіть API ключ:\nhttps://opendata.universalnabaza.com.ua') || '').trim();
             if (key) GM_setValue('oscpv_odua_api_key', key);
         }
         return key;
     }
 
+    function getVehicleServiceLabel() {
+        const { service, customUrl } = getVehicleApiSettings();
+        let name;
+        if (service === 'custom') {
+            try { name = new URL(customUrl).hostname; } catch(_) { name = 'Custom'; }
+        } else {
+            name = VEHICLE_SERVICES[service] || service;
+        }
+        return `Збагачувати дані авто (${name})`;
+    }
+
+    function _mapCalcCategory(d) {
+        if (!d.total_weight || !d.own_weight) return '';
+        const total = parseInt(d.total_weight, 10), own = parseInt(d.own_weight, 10);
+        if (isNaN(total) || isNaN(own)) return '';
+        const p = total - own;
+        if (total <= 2400 && p <= 2000) return 'C0';
+        if (total > 2400 && total <= 7500 && p <= 2000) return 'C1';
+        if (total > 7500 || p > 2000) return 'C2';
+        return '';
+    }
+
     function fetchVehicleData(identifier, type) {
         return new Promise(resolve => {
-            const apiKey = getOduaApiKey();
-            if (!apiKey) { resolve(null); return; }
-            const endpoint = type === 'vin' ? 'vin' : 'plate';
-            GM_xmlhttpRequest({
-                method: 'GET',
-                url: 'https://opendata.universalnabaza.com.ua/api/v1/cars/' + endpoint + '/' + encodeURIComponent(identifier),
-                headers: { 'X-Api-Key': apiKey },
-                timeout: 10000,
-                onload: resp => {
-                    try {
-                        if (resp.status === 404) { resolve(null); return; }
-                        const json = JSON.parse(resp.responseText);
-                        if (!json.records || !json.records.length) { resolve(null); return; }
-                        const d = json.records[0];
-                        let calc_category = '';
-                        if (d.total_weight && d.own_weight) {
-                            const total = parseInt(d.total_weight, 10);
-                            const own = parseInt(d.own_weight, 10);
-                            if (!isNaN(total) && !isNaN(own)) {
-                                const payload = total - own;
-                                if (total <= 2400 && payload <= 2000) {
-                                    calc_category = 'C0';
-                                } else if (total > 2400 && total <= 7500 && payload <= 2000) {
-                                    calc_category = 'C1';
-                                } else if (total > 7500 || payload > 2000) {
-                                    calc_category = 'C2';
-                                }
-                            }
-                        }
-                        resolve({
-                            brand: d.brand || '',
-                            model: d.model || '',
-                            year: d.year ? String(d.year) : '',
-                            fuel: d.fuel_type || '',
-                            engine: d.engine_volume ? d.engine_volume + ' см³' : '',
-                            weight: d.own_weight ? d.own_weight + ' кг' : '',
-                            total_weight: d.total_weight ? d.total_weight + ' кг' : '',
-                            seats: d.num_seats ? String(d.num_seats) : '',
-                            region: d.region || '',
-                            color: d.color || '',
-                            vin: d.vin || '',
-                            body: d.body_type || '',
-                            body_detail: d.body_detail || '',
-                            purpose: d.purpose || '',
-                            category: '',
-                            calc_category: calc_category
-                        });
-                    } catch (e) { resolve(null); }
-                },
-                onerror: () => resolve(null),
-                ontimeout: () => resolve(null)
-            });
+            const { service, customUrl, apiKey } = getVehicleApiSettings();
+            const key = apiKey || getOduaApiKey();
+            if (!key) { resolve(null); return; }
+
+            if (service === 'carplates') {
+                GM_xmlhttpRequest({
+                    method: 'POST',
+                    url: 'https://api.carplates.app/ua/gov-registration',
+                    headers: { 'X-Locale': 'uk', 'X-API-Key': key, 'Content-Type': 'application/json' },
+                    data: JSON.stringify({ number: identifier }),
+                    timeout: 10000,
+                    onload: resp => {
+                        try {
+                            const json = JSON.parse(resp.responseText);
+                            if (!json.success || !json.data) { resolve(null); return; }
+                            const d = json.data;
+                            resolve({
+                                brand: d.brand||'', model: d.model||'',
+                                year: d.make_year ? String(d.make_year) : '',
+                                fuel: d.fuel||'',
+                                engine: d.capacity ? d.capacity+' см³' : '',
+                                weight: d.own_weight ? d.own_weight+' кг' : '',
+                                total_weight: d.total_weight ? d.total_weight+' кг' : '',
+                                seats: d.seating ? String(d.seating) : '',
+                                region: d.region||'', color: d.color||'',
+                                vin: d.vin||'', body: d.body||'',
+                                body_detail: '', purpose: '',
+                                category: d.category||'', calc_category: _mapCalcCategory(d),
+                            });
+                        } catch(e) { resolve(null); }
+                    },
+                    onerror: () => resolve(null), ontimeout: () => resolve(null)
+                });
+            } else {
+                const baseUrl = (service === 'custom' && customUrl)
+                    ? customUrl.replace(/\/$/, '')
+                    : 'https://opendata.universalnabaza.com.ua';
+                const endpoint = type === 'vin' ? 'vin' : 'plate';
+                GM_xmlhttpRequest({
+                    method: 'GET',
+                    url: `${baseUrl}/api/v1/cars/${endpoint}/${encodeURIComponent(identifier)}`,
+                    headers: { 'X-Api-Key': key },
+                    timeout: 10000,
+                    onload: resp => {
+                        try {
+                            if (resp.status === 404) { resolve(null); return; }
+                            const json = JSON.parse(resp.responseText);
+                            if (!json.records || !json.records.length) { resolve(null); return; }
+                            const d = json.records[0];
+                            resolve({
+                                brand: d.brand||'', model: d.model||'',
+                                year: d.year ? String(d.year) : '',
+                                fuel: d.fuel_type||'',
+                                engine: d.engine_volume ? d.engine_volume+' см³' : '',
+                                weight: d.own_weight ? d.own_weight+' кг' : '',
+                                total_weight: d.total_weight ? d.total_weight+' кг' : '',
+                                seats: d.num_seats ? String(d.num_seats) : '',
+                                region: d.region||'', color: d.color||'',
+                                vin: d.vin||'', body: d.body_type||'',
+                                body_detail: d.body_detail||'', purpose: d.purpose||'',
+                                category: '', calc_category: _mapCalcCategory(d),
+                            });
+                        } catch(e) { resolve(null); }
+                    },
+                    onerror: () => resolve(null), ontimeout: () => resolve(null)
+                });
+            }
         });
     }
 
-    // ====== Carplates: черга, кеш ======
+        // ====== Carplates: черга, кеш ======
     const CARPLATES_CACHE = new Map();   // plate -> data
     const CARPLATES_PENDING = new Map(); // plate -> Promise
     let carplatesQueue = Promise.resolve();
