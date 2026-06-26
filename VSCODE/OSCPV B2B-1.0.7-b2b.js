@@ -1118,16 +1118,22 @@
     // ====== Carplates gov-registration API ======
 
     function getOduaApiKey() {
-        return GM_getValue('oscpv_odua_api_key', 'odua_282fZnAy4m2_-cNCrX41qVW57cJLttwiS4P4pXU5yzI');
+        let key = GM_getValue('oscpv_odua_api_key', '');
+        if (!key) {
+            key = (prompt('Введіть API ключ OpenDataUA (odua_xxx...):\nhttps://opendata.universalnabaza.com.ua') || '').trim();
+            if (key) GM_setValue('oscpv_odua_api_key', key);
+        }
+        return key;
     }
 
-    function fetchPlateData(plate) {
+    function fetchVehicleData(identifier, type) {
         return new Promise(resolve => {
             const apiKey = getOduaApiKey();
             if (!apiKey) { resolve(null); return; }
+            const endpoint = type === 'vin' ? 'vin' : 'plate';
             GM_xmlhttpRequest({
                 method: 'GET',
-                url: 'https://opendata.universalnabaza.com.ua/api/v1/cars/plate/' + encodeURIComponent(plate),
+                url: 'https://opendata.universalnabaza.com.ua/api/v1/cars/' + endpoint + '/' + encodeURIComponent(identifier),
                 headers: { 'X-Api-Key': apiKey },
                 timeout: 10000,
                 onload: resp => {
@@ -1179,13 +1185,19 @@
         if (btn) { btn.disabled = true; btn.textContent = '...'; }
 
         const allRows = Array.from(document.querySelectorAll('tr[data-row-idx]'));
-        const plates = [];
+
+        const vinIds = [], plateIds = [];
         for (const tr of allRows) {
-            const plateEl = tr.querySelector('.oscpv2-car-plate');
-            const plate = plateEl ? plateEl.textContent.trim() : '';
-            plates.push(plate);
+            const rowIdx = parseInt(tr.dataset.rowIdx);
+            const r = results[rowIdx];
+            if (!r) continue;
+            if (r.vin) vinIds.push(r.vin);
+            else {
+                const plateEl = tr.querySelector('.oscpv2-car-plate');
+                const plate = plateEl ? plateEl.textContent.trim() : '';
+                if (plate) plateIds.push(plate);
+            }
         }
-        const uniquePlates = [...new Set(plates.filter(Boolean))];
 
         const apiKey = getOduaApiKey();
         if (!apiKey) {
@@ -1194,62 +1206,70 @@
         }
 
         const resultMap = {};
-        const BATCH = 100;
-        for (let i = 0; i < uniquePlates.length; i += BATCH) {
-            const chunk = uniquePlates.slice(i, i + BATCH);
-            await new Promise(resolve => {
-                GM_xmlhttpRequest({
-                    method: 'POST',
-                    url: 'https://opendata.universalnabaza.com.ua/api/v1/cars/lookup',
-                    headers: { 'X-Api-Key': apiKey, 'Content-Type': 'application/json' },
-                    data: JSON.stringify({ identifiers: chunk }),
-                    timeout: 30000,
-                    onload: resp => {
-                        try {
-                            const json = JSON.parse(resp.responseText);
-                            if (json.results) {
-                                for (const r of json.results) {
-                                    if (!r.found) continue;
-                                    let calc_category = '';
-                                    if (r.total_weight && r.own_weight) {
-                                        const total = parseInt(r.total_weight, 10);
-                                        const own = parseInt(r.own_weight, 10);
-                                        if (!isNaN(total) && !isNaN(own)) {
-                                            const p = total - own;
-                                            if (total <= 2400 && p <= 2000) calc_category = 'C0';
-                                            else if (total > 2400 && total <= 7500 && p <= 2000) calc_category = 'C1';
-                                            else if (total > 7500 || p > 2000) calc_category = 'C2';
+
+        async function fetchBatch(identifiers) {
+            const BATCH = 100;
+            for (let i = 0; i < identifiers.length; i += BATCH) {
+                const chunk = [...new Set(identifiers.slice(i, i + BATCH))];
+                if (!chunk.length) continue;
+                await new Promise(resolve => {
+                    GM_xmlhttpRequest({
+                        method: 'POST',
+                        url: 'https://opendata.universalnabaza.com.ua/api/v1/cars/lookup',
+                        headers: { 'X-Api-Key': apiKey, 'Content-Type': 'application/json' },
+                        data: JSON.stringify({ identifiers: chunk }),
+                        timeout: 30000,
+                        onload: resp => {
+                            try {
+                                const json = JSON.parse(resp.responseText);
+                                if (json.results) {
+                                    for (const r of json.results) {
+                                        if (!r.found) continue;
+                                        let calc_category = '';
+                                        if (r.total_weight && r.own_weight) {
+                                            const total = parseInt(r.total_weight, 10);
+                                            const own = parseInt(r.own_weight, 10);
+                                            if (!isNaN(total) && !isNaN(own)) {
+                                                const p = total - own;
+                                                if (total <= 2400 && p <= 2000) calc_category = 'C0';
+                                                else if (total > 2400 && total <= 7500 && p <= 2000) calc_category = 'C1';
+                                                else if (total > 7500 || p > 2000) calc_category = 'C2';
+                                            }
                                         }
+                                        resultMap[r.query] = {
+                                            brand: r.brand || '', model: r.model || '',
+                                            year: r.year ? String(r.year) : '',
+                                            fuel: r.fuel_type || '',
+                                            engine: r.engine_volume ? r.engine_volume + ' см³' : '',
+                                            weight: r.own_weight ? r.own_weight + ' кг' : '',
+                                            total_weight: r.total_weight ? r.total_weight + ' кг' : '',
+                                            region: r.region || '', color: r.color || '',
+                                            vin: r.vin || '', body: r.body_type || '', calc_category
+                                        };
                                     }
-                                    resultMap[r.query] = {
-                                        brand: r.brand || '', model: r.model || '',
-                                        year: r.year ? String(r.year) : '',
-                                        fuel: r.fuel_type || '',
-                                        engine: r.engine_volume ? r.engine_volume + '\xa0см³' : '',
-                                        weight: r.own_weight ? r.own_weight + '\xa0кг' : '',
-                                        total_weight: r.total_weight ? r.total_weight + '\xa0кг' : '',
-                                        region: r.region || '', color: r.color || '',
-                                        vin: r.vin || '', body: r.body_type || '',
-                                        calc_category
-                                    };
                                 }
-                            }
-                        } catch (e) { /* skip */ }
-                        resolve();
-                    },
-                    onerror: () => resolve(),
-                    ontimeout: () => resolve()
+                            } catch (e) { /* skip */ }
+                            resolve();
+                        },
+                        onerror: () => resolve(),
+                        ontimeout: () => resolve()
+                    });
                 });
-            });
-            if (btn) btn.textContent = `${Math.min(i + BATCH, uniquePlates.length)}/${uniquePlates.length}`;
+                if (btn) btn.textContent = `${Math.min(i + BATCH, identifiers.length)}/${identifiers.length}`;
+            }
         }
+
+        await fetchBatch(vinIds);
+        await fetchBatch(plateIds);
 
         let enriched = 0;
         for (const tr of allRows) {
+            const rowIdx = parseInt(tr.dataset.rowIdx);
+            const r = results[rowIdx];
+            if (!r) continue;
             const plateEl = tr.querySelector('.oscpv2-car-plate');
-            if (!plateEl) continue;
-            const plate = plateEl.textContent.trim();
-            const data = resultMap[plate];
+            const key = r.vin || (plateEl ? plateEl.textContent.trim() : '');
+            const data = resultMap[key];
             if (!data || !data.brand) continue;
             const brandEl = tr.querySelector('.oscpv2-car-brand');
             if (brandEl) {

@@ -1100,7 +1100,7 @@
                     statsFound++;
                     const carText = [(r.vehicle_brand || ''), (r.vehicle_title || '')].filter(Boolean).join(' ') +
                         (r.plate_no ? ' / ' + r.plate_no : '');
-                    const needCarplates = carplatesEnabled && r.plate_no;
+                    const needCarplates = carplatesEnabled && (r.vin || r.plate_no);
                     const copyBtn = needCarplates
                         ? `<button class="oscpv-copy-btn loading" data-row="${rowIdx}" title="Запит до carplates.app..."><svg viewBox="0 0 14 14" fill="none" width="11" height="11"><path d="M7 1v6M3 4l4 4 4-4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/><path d="M1 11h12" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg></button>`
                         : (r.plate_no ? `<button class="oscpv-copy-btn" data-row="${rowIdx}" data-disabled="1" title="Дані авто вимкнено"><svg viewBox="0 0 14 14" fill="none" width="11" height="11"><rect x="2" y="1" width="9" height="12" rx="1" stroke="currentColor" stroke-width="1.5"/><path d="M5 5h4M5 8h4M5 11h2" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg></button>` : '');
@@ -1145,8 +1145,10 @@
                 tbody.appendChild(tr);
 
                 // Запускаємо парсинг carplates у фоні якщо увімкнено і є VIN
-                if (carplatesEnabled && !r._notFound && r.plate_no) {
-                    queueCarplatesParse(rowIdx, r.plate_no);
+                if (carplatesEnabled && !r._notFound && (r.vin || r.plate_no)) {
+                    const _id = r.vin || r.plate_no;
+                    const _type = r.vin ? 'vin' : 'plate';
+                    queueCarplatesParse(rowIdx, _id, _type);
                 }
             });
             document.getElementById('oscpv-stat-found').textContent = statsFound;
@@ -1163,16 +1165,22 @@
     // ====== Carplates gov-registration API ======
 
     function getOduaApiKey() {
-        return GM_getValue('oscpv_odua_api_key', 'odua_282fZnAy4m2_-cNCrX41qVW57cJLttwiS4P4pXU5yzI');
+        let key = GM_getValue('oscpv_odua_api_key', '');
+        if (!key) {
+            key = (prompt('Введіть API ключ OpenDataUA (odua_xxx...):\nhttps://opendata.universalnabaza.com.ua') || '').trim();
+            if (key) GM_setValue('oscpv_odua_api_key', key);
+        }
+        return key;
     }
 
-    function fetchPlateData(plate) {
+    function fetchVehicleData(identifier, type) {
         return new Promise(resolve => {
             const apiKey = getOduaApiKey();
             if (!apiKey) { resolve(null); return; }
+            const endpoint = type === 'vin' ? 'vin' : 'plate';
             GM_xmlhttpRequest({
                 method: 'GET',
-                url: 'https://opendata.universalnabaza.com.ua/api/v1/cars/plate/' + encodeURIComponent(plate),
+                url: 'https://opendata.universalnabaza.com.ua/api/v1/cars/' + endpoint + '/' + encodeURIComponent(identifier),
                 headers: { 'X-Api-Key': apiKey },
                 timeout: 10000,
                 onload: resp => {
@@ -1227,30 +1235,30 @@
     const CARPLATES_PENDING = new Map(); // plate -> Promise
     let carplatesQueue = Promise.resolve();
 
-    function queueCarplatesParse(rowIdx, plate) {
-        if (CARPLATES_CACHE.has(plate)) {
-            const data = CARPLATES_CACHE.get(plate);
-            log(`carplates: ${plate} — з кешу`, 'dim');
-            applyCarplatesToRow(rowIdx, data, plate);
+    function queueCarplatesParse(rowIdx, identifier, type) {
+        if (CARPLATES_CACHE.has(identifier)) {
+            const data = CARPLATES_CACHE.get(identifier);
+            log(`odua: ${identifier} — з кешу`, 'dim');
+            applyCarplatesToRow(rowIdx, data, identifier);
             return;
         }
 
-        if (CARPLATES_PENDING.has(plate)) {
-            CARPLATES_PENDING.get(plate).then(data => {
-                applyCarplatesToRow(rowIdx, data, plate);
+        if (CARPLATES_PENDING.has(identifier)) {
+            CARPLATES_PENDING.get(identifier).then(data => {
+                applyCarplatesToRow(rowIdx, data, identifier);
             }).catch(() => {
-                applyCarplatesToRow(rowIdx, null, plate);
+                applyCarplatesToRow(rowIdx, null, identifier);
             });
             return;
         }
 
         const promise = new Promise(resolve => {
             carplatesQueue = carplatesQueue.then(async () => {
-                log(`carplates: запит ${plate}...`, 'dim');
+                log(`odua: запит ${identifier} (${type})...`, 'dim');
                 let data = null;
                 try {
-                    data = await fetchPlateData(plate);
-                    if (data && data.brand) CARPLATES_CACHE.set(plate, data);
+                    data = await fetchVehicleData(identifier, type);
+                    if (data && data.brand) CARPLATES_CACHE.set(identifier, data);
                     else data = null;
                 } catch (e) {
                     console.warn('[OSCPV] carplates error:', e);
@@ -1261,10 +1269,10 @@
             });
         });
 
-        CARPLATES_PENDING.set(plate, promise);
+        CARPLATES_PENDING.set(identifier, promise);
         promise.then(data => {
-            CARPLATES_PENDING.delete(plate);
-            applyCarplatesToRow(rowIdx, data, plate);
+            CARPLATES_PENDING.delete(identifier);
+            applyCarplatesToRow(rowIdx, data, identifier);
         });
     }
 
@@ -1303,13 +1311,13 @@
             btn.innerHTML = SVG_COPY;
             const text = buildClipboardText(data);
             btn.title = 'Копіювати дані авто:\n' + text;
-            log(`carplates: ${plate} → ${data.brand} ${data.model} ${data.year}`, 'ok');
+            log(`odua: ${plate} → ${data.brand} ${data.model} ${data.year}`, 'ok');
         } else {
             btn.classList.remove('loading');
             btn.classList.add('error');
             btn.innerHTML = SVG_ERR;
             btn.title = 'Дані по авто не знайдено';
-            log(`carplates: ${plate} — дані не знайдено`, 'err');
+            log(`odua: ${plate} — дані не знайдено`, 'err');
         }
     }
 
