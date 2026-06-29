@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         OSCPV B2B — Пошук полісів (Odoo + Universalna)
 // @namespace    universalna.oscpv.b2b
-// @version      1.6.0-b2b
+// @version      1.7.0-b2b
 // @description  B2B: пакетний пошук полісів ОСЦПВ для юридичних осіб за ЄДРПОУ (incore + прямий парсинг таблиці + concurrency)
 // @author       custom
 // @match        https://odoo.icu.int/*
@@ -1493,7 +1493,7 @@
             }
         }
 
-        const apiKey = getOduaApiKey();
+        const apiKey = GM_getValue('oscpv_odua_api_key', '') || getOduaApiKey();
         if (!apiKey) {
             if (btn) { btn.disabled = false; btn.textContent = 'ЗБАГАТИТИ АВТО'; }
             return;
@@ -1964,7 +1964,13 @@
         if (info) info.textContent = `Готово: ${statsFound} полісів, ${statsEmpty} без даних`;
 
         if (GM_getValue('oscpv_b2b_auto_enrich', false) && results.length > 0) {
-            enrichResultsWithCarplates();
+            const autoKey = GM_getValue('oscpv_odua_api_key', '');
+            if (!autoKey) {
+                log('Авто-збагачення: API ключ не встановлено — відкрийте ⚙ і збережіть ключ', 'warn');
+            } else {
+                log('Авто-збагачення: запуск...', 'info');
+                setTimeout(() => enrichResultsWithCarplates(), 300);
+            }
         }
     }
 
