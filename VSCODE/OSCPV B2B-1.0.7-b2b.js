@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         OSCPV B2B — Пошук полісів (Odoo + Universalna)
 // @namespace    universalna.oscpv.b2b
-// @version      1.5.0-b2b
+// @version      1.6.0-b2b
 // @description  B2B: пакетний пошук полісів ОСЦПВ для юридичних осіб за ЄДРПОУ (incore + прямий парсинг таблиці + concurrency)
 // @author       custom
 // @match        https://odoo.icu.int/*
@@ -441,14 +441,14 @@
                                     <input type="checkbox" id="oscpv2-car-lookup-enable">
                                     <span class="oscpv2-toggle-slider"></span>
                                     <span class="oscpv2-toggle-text">
-                                        <span>Пошук авто за номером</span>
-                                        <span class="oscpv2-toggle-hint">Пряме звернення до OpenDataUA по номерному знаку або VIN</span>
+                                        <span>Авто-збагачення даних авто</span>
+                                        <span class="oscpv2-toggle-hint">Автоматично підтягує марку, модель, рік, паливо, VIN з OpenDataUA після завершення пошуку</span>
                                     </span>
                                 </label>
                             </div>
                         </section>
 
-                        <section class="oscpv2-card oscpv2-car-lookup-card" id="oscpv2-car-lookup-card" style="display:none">
+                        <section class="oscpv2-card oscpv2-car-lookup-card" id="oscpv2-car-lookup-card">
                             <div class="oscpv2-card-header">
                                 <div class="oscpv2-card-title">
                                     <svg viewBox="0 0 20 20" fill="none" width="14" height="14" aria-hidden="true">
@@ -652,19 +652,18 @@
             if (cancelBtn) cancelBtn.onclick = () => { panel.style.display = 'none'; };
         })();
 
-        // Car lookup toggle + search
+        // Auto-enrich toggle
         (function() {
             const toggleEl = modalEl.querySelector('#oscpv2-car-lookup-enable');
-            const card     = modalEl.querySelector('#oscpv2-car-lookup-card');
-            if (toggleEl && card) {
-                const saved = GM_getValue('oscpv_car_lookup_enable', false);
-                toggleEl.checked = saved;
-                card.style.display = saved ? 'block' : 'none';
-                toggleEl.onchange = function() {
-                    card.style.display = this.checked ? 'block' : 'none';
-                    GM_setValue('oscpv_car_lookup_enable', this.checked);
-                };
-            }
+            if (!toggleEl) return;
+            toggleEl.checked = GM_getValue('oscpv_b2b_auto_enrich', false);
+            toggleEl.onchange = function() {
+                GM_setValue('oscpv_b2b_auto_enrich', this.checked);
+            };
+        })();
+
+        // Car lookup search
+        (function() {
             const input  = modalEl.querySelector('#oscpv2-car-lookup-input');
             const btn    = modalEl.querySelector('#oscpv2-car-lookup-btn');
             const result = modalEl.querySelector('#oscpv2-car-lookup-result');
@@ -1963,6 +1962,10 @@
 
         if (stage) stage.textContent = 'ЗАВЕРШЕНО';
         if (info) info.textContent = `Готово: ${statsFound} полісів, ${statsEmpty} без даних`;
+
+        if (GM_getValue('oscpv_b2b_auto_enrich', false) && results.length > 0) {
+            enrichResultsWithCarplates();
+        }
     }
 
     function escapeHtml(s) {
@@ -1972,7 +1975,7 @@
 
     function formatMoney(n) {
         // Розділяємо тисячі пробілами для зручного читання: 12500 → "12 500"
-        return Number(n).toLocaleString('uk-UA').replace(/,/g, ' ');
+        return Number(n).toLocaleString('uk-UA');
     }
 
     function exportExcel() {
