@@ -1,10 +1,11 @@
 // ==UserScript==
 // @name         OSCPV B2B — Пошук полісів (Odoo + Universalna)
 // @namespace    universalna.oscpv.b2b
-// @version      1.3.0-b2b
+// @version      1.4.0-b2b
 // @description  B2B: пакетний пошук полісів ОСЦПВ для юридичних осіб за ЄДРПОУ (incore + прямий парсинг таблиці + concurrency)
 // @author       custom
 // @match        https://odoo.icu.int/*
+// @match        https://odoo.universalna.com/*
 // @match        https://dict.universalna.com/*
 // @match        https://incore.universalna.com/*
 // @require      https://cdn.jsdelivr.net/npm/xlsx-js-style@1.2.0/dist/xlsx.bundle.js
@@ -437,6 +438,31 @@
                             </div>
                         </section>
 
+                        <section class="oscpv2-card oscpv2-car-lookup-card" id="oscpv2-car-lookup-card">
+                            <div class="oscpv2-card-header">
+                                <div class="oscpv2-card-title">
+                                    <svg viewBox="0 0 20 20" fill="none" width="14" height="14" aria-hidden="true">
+                                        <rect x="2" y="8" width="16" height="8" rx="2" stroke="currentColor" stroke-width="2"/>
+                                        <circle cx="6" cy="16" r="2" stroke="currentColor" stroke-width="1.5"/>
+                                        <circle cx="14" cy="16" r="2" stroke="currentColor" stroke-width="1.5"/>
+                                        <path d="M4 8V6a2 2 0 0 1 2-2h5l3 4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                                    </svg>
+                                    ПОШУК АВТО
+                                </div>
+                            </div>
+                            <div class="oscpv2-car-lookup-row">
+                                <input type="text" class="oscpv2-car-lookup-input" id="oscpv2-car-lookup-input" placeholder="АА1234ВВ або VIN...">
+                                <button type="button" class="oscpv2-btn" id="oscpv2-car-lookup-btn">
+                                    <svg viewBox="0 0 20 20" fill="none" width="13" height="13" aria-hidden="true">
+                                        <circle cx="9" cy="9" r="5.5" stroke="currentColor" stroke-width="2"/>
+                                        <path d="M13.5 13.5L17 17" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                                    </svg>
+                                    ПОШУК
+                                </button>
+                            </div>
+                            <div class="oscpv2-car-lookup-result" id="oscpv2-car-lookup-result" style="display:none"></div>
+                        </section>
+
                         <section class="oscpv2-card" id="oscpv2-progress-card" style="display:none">
                             <div class="oscpv2-card-header" style="margin-bottom:10px">
                                 <div class="oscpv2-card-title">
@@ -614,6 +640,34 @@
                 if (enrichBtn) enrichBtn.title = `Збагатити дані авто через ${(VEHICLE_SERVICES[service]||service)} API`;
             };
             if (cancelBtn) cancelBtn.onclick = () => { panel.style.display = 'none'; };
+        })();
+
+        // Car lookup
+        (function() {
+            const input  = modalEl.querySelector('#oscpv2-car-lookup-input');
+            const btn    = modalEl.querySelector('#oscpv2-car-lookup-btn');
+            const result = modalEl.querySelector('#oscpv2-car-lookup-result');
+            if (!btn || !input || !result) return;
+            async function doLookup() {
+                const raw = input.value.trim().toUpperCase().replace(/\s+/g, '');
+                if (!raw) return;
+                const isVin = /^[A-HJ-NPR-Z0-9]{5,17}$/.test(raw);
+                btn.disabled = true;
+                result.style.display = 'block';
+                result.innerHTML = '<div class="oscpv2-car-lookup-loading"><div class="oscpv2-spinner"></div><span>Запит до OpenDataUA...</span></div>';
+                try {
+                    const data = await fetchVehicleData(raw, isVin ? 'vin' : 'plate');
+                    result.innerHTML = data
+                        ? renderCarLookupResult(data)
+                        : '<div class="oscpv2-car-lookup-empty">Авто не знайдено в реєстрі МВС</div>';
+                } catch(e) {
+                    result.innerHTML = '<div class="oscpv2-car-lookup-empty">Помилка запиту</div>';
+                } finally {
+                    btn.disabled = false;
+                }
+            }
+            btn.onclick = doLookup;
+            input.addEventListener('keydown', e => { if (e.key === 'Enter') doLookup(); });
         })();
 
         // Табси - перемикання
@@ -1165,6 +1219,38 @@
                 background: rgba(7,44,44,0.08); color: var(--color-primary); border-color: var(--color-border-strong);
             }
 
+            /* CAR LOOKUP CARD */
+            #oscpv2-modal .oscpv2-car-lookup-card { flex-shrink: 0; }
+            #oscpv2-modal .oscpv2-car-lookup-row { display: flex; gap: 8px; align-items: center; margin-bottom: 10px; }
+            #oscpv2-modal .oscpv2-car-lookup-input { flex: 1; font-family: var(--font-mono); font-size: 13px; font-weight: 600;
+                border: 1px solid var(--color-border); border-radius: var(--radius); padding: 8px 12px;
+                background: var(--color-surface-2); color: var(--color-primary); text-transform: uppercase;
+                outline: none; transition: border-color var(--duration) var(--ease), box-shadow var(--duration) var(--ease); }
+            #oscpv2-modal .oscpv2-car-lookup-input:focus { border-color: var(--color-primary); background: var(--color-surface-3);
+                box-shadow: 0 0 0 3px rgba(7,44,44,0.15); }
+            #oscpv2-modal .oscpv2-car-lookup-result { display: flex; flex-direction: column; gap: 10px; }
+            #oscpv2-modal .oscpv2-car-lookup-loading { display: flex; align-items: center; gap: 10px;
+                color: var(--color-text-muted); font-size: 13px; padding: 8px 0; }
+            #oscpv2-modal .oscpv2-car-lookup-empty { color: var(--color-text-muted); font-size: 13px;
+                padding: 10px 0; text-align: center; }
+            #oscpv2-modal .oscpv2-car-lookup-heading { font-family: var(--font-mono); font-size: 14px; font-weight: 700;
+                color: var(--color-primary); letter-spacing: 0.03em; }
+            #oscpv2-modal .oscpv2-car-lookup-summary { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
+            #oscpv2-modal .oscpv2-car-lookup-stat { background: var(--color-surface-3);
+                border: 1px solid var(--color-border); border-radius: var(--radius-md); padding: 6px 8px; text-align: center; }
+            #oscpv2-modal .oscpv2-car-lookup-stat-num { font-family: var(--font-display,sans-serif); font-size: 16px; font-weight: 700;
+                color: var(--color-secondary); line-height: 1.1; }
+            #oscpv2-modal .oscpv2-car-lookup-stat-label { font-size: 9px; color: var(--color-text-muted);
+                text-transform: uppercase; letter-spacing: 0.06em; margin-top: 2px; }
+            #oscpv2-modal .oscpv2-car-lookup-fields { display: grid; grid-template-columns: repeat(2, 1fr); gap: 6px; }
+            #oscpv2-modal .oscpv2-car-lookup-field { background: var(--color-surface-2);
+                border: 1px solid var(--color-border); border-radius: var(--radius-md); padding: 6px 8px; }
+            #oscpv2-modal .oscpv2-car-lookup-field-label { font-size: 10px; color: var(--color-text-muted);
+                text-transform: uppercase; letter-spacing: 0.06em; font-weight: 500; margin-bottom: 2px; }
+            #oscpv2-modal .oscpv2-car-lookup-field-value { font-size: 11px; font-weight: 600; color: var(--color-text);
+                word-break: break-word; }
+            #oscpv2-modal .oscpv2-car-lookup-source { font-size: 10px; color: var(--color-text-subtle); text-align: right; }
+
             /* RESPONSIVE */
             @media (max-width: 920px) {
                 #oscpv2-modal .oscpv2-body { grid-template-columns: 1fr; }
@@ -1186,6 +1272,57 @@
     }
 
     function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+
+    function renderCarLookupResult(data) {
+        const f = v => v || '—';
+        const heading = [data.brand, data.model, data.year].filter(Boolean).join(' ') || '—';
+        const fieldDefs = [
+            { label: 'Колір',       value: f(data.color) },
+            { label: 'Паливо',      value: f(data.fuel) },
+            { label: 'Двигун',      value: f(data.engine) },
+            { label: 'Кузов',       value: [data.body, data.body_detail].filter(Boolean).join(' / ') || '—' },
+            { label: 'Маса',        value: f(data.weight) },
+            { label: 'VIN',         value: f(data.vin) },
+            { label: 'Регіон',      value: f(data.region) },
+            { label: 'Власник',     value: f(data.owner_type) },
+            { label: 'Дата рестр.', value: f(data.registration_date) },
+            { label: 'Операція',    value: f(data.oper_name) },
+        ].filter(fd => fd.value && fd.value !== '—');
+        const s = data.summary;
+        const summaryHtml = s ? `
+            <div class="oscpv2-car-lookup-summary">
+                <div class="oscpv2-car-lookup-stat">
+                    <div class="oscpv2-car-lookup-stat-num">${s.total_records ?? '—'}</div>
+                    <div class="oscpv2-car-lookup-stat-label">Записів</div>
+                </div>
+                <div class="oscpv2-car-lookup-stat">
+                    <div class="oscpv2-car-lookup-stat-num">${s.owner_changes ?? '—'}</div>
+                    <div class="oscpv2-car-lookup-stat-label">Зміни власника</div>
+                </div>
+                <div class="oscpv2-car-lookup-stat">
+                    <div class="oscpv2-car-lookup-stat-num" style="font-size:12px">${s.first_registration ?? '—'}</div>
+                    <div class="oscpv2-car-lookup-stat-label">Перша рестр.</div>
+                </div>
+                <div class="oscpv2-car-lookup-stat">
+                    <div class="oscpv2-car-lookup-stat-num" style="font-size:12px">${s.last_registration ?? '—'}</div>
+                    <div class="oscpv2-car-lookup-stat-label">Остання рестр.</div>
+                </div>
+            </div>` : '';
+        const sourceNote = data._source === 'nhtsa'
+            ? '<div class="oscpv2-car-lookup-source">Дані: NHTSA vPIC (не МВС України)</div>'
+            : '';
+        return `
+            <div class="oscpv2-car-lookup-heading">${heading}</div>
+            ${summaryHtml}
+            <div class="oscpv2-car-lookup-fields">
+                ${fieldDefs.map(fd => `
+                    <div class="oscpv2-car-lookup-field">
+                        <div class="oscpv2-car-lookup-field-label">${fd.label}</div>
+                        <div class="oscpv2-car-lookup-field-value">${fd.value}</div>
+                    </div>`).join('')}
+            </div>
+            ${sourceNote}`;
+    }
 
     // ====== Vehicle API settings ======
 
@@ -1277,7 +1414,13 @@
                                 total_weight: d.total_weight ? d.total_weight+' кг' : '',
                                 region: d.region||'', color: d.color||'',
                                 vin: d.vin||'', body: d.body_type||'',
+                                body_detail: d.body_detail||'',
                                 calc_category: _mapCalcCategory(d),
+                                owner_type: d.owner_type||'',
+                                registration_date: d.registration_date||'',
+                                oper_name: d.oper_name||'',
+                                summary: json.summary||null,
+                                _source: json._source||'',
                             });
                         } catch(e) { resolve(null); }
                     },
