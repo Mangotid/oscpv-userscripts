@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         OSCPV B2C — Пошук полісів (Odoo + Universalna)
 // @namespace    universalna.oscpv.b2c
-// @version      2.16.3-b2c
+// @version      2.17.0-b2c
 // @description  B2C: ОСЦПВ через incore.universalna.com + дані авто (OpenDataUA) + дата початку полісу
 // @author       Universalna Baza
 // @match        https://odoo.icu.int/*
@@ -1353,6 +1353,10 @@
                                 vin: d.vin||'', body: d.body_type||'',
                                 body_detail: d.body_detail||'', purpose: d.purpose||'',
                                 category: '', calc_category: _mapCalcCategory(d),
+                                owner_type: d.owner_type||'',
+                                registration_date: d.registration_date||'',
+                                oper_name: d.oper_name||'',
+                                _source: json._source||'',
                             });
                         } catch(e) { resolve(null); }
                     },
@@ -1426,6 +1430,10 @@
                 results[rowIdx].cp_vin = data.vin || '';
                 results[rowIdx].cp_body = data.body || '';
                 results[rowIdx].cp_category = data.category || '';
+                results[rowIdx].cp_owner_type = data.owner_type || '';
+                results[rowIdx].cp_registration_date = data.registration_date || '';
+                results[rowIdx].cp_oper_name = data.oper_name || '';
+                results[rowIdx].cp_source = data._source || '';
             } else {
                 results[rowIdx].cp_brand = '';
                 results[rowIdx].cp_error = 'не знайдено';
@@ -1467,6 +1475,9 @@
         if (d.seats) lines.push(`Місць: ${d.seats}`);
         if (d.region) lines.push(`Регіон: ${d.region}`);
         if (d.vin) lines.push(`VIN: ${d.vin}`);
+        if (d.owner_type) lines.push(`Власник: ${d.owner_type}`);
+        if (d.registration_date) lines.push(`Дата рестр.: ${d.registration_date}`);
+        if (d._source === 'nhtsa') lines.push('Дані: NHTSA vPIC (не МВС України)');
         return lines.join('\n');
     }
 
