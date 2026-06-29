@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         OSCPV B2B — Пошук полісів (Odoo + Universalna)
 // @namespace    universalna.oscpv.b2b
-// @version      1.7.0-b2b
+// @version      1.8.0-b2b
 // @description  B2B: пакетний пошук полісів ОСЦПВ для юридичних осіб за ЄДРПОУ (incore + прямий парсинг таблиці + concurrency)
 // @author       custom
 // @match        https://odoo.icu.int/*
@@ -436,16 +436,6 @@
                                     <span class="oscpv2-unit">мс</span>
                                 </div>
                             </div>
-                            <div class="oscpv2-toggle-wrap">
-                                <label class="oscpv2-toggle">
-                                    <input type="checkbox" id="oscpv2-car-lookup-enable">
-                                    <span class="oscpv2-toggle-slider"></span>
-                                    <span class="oscpv2-toggle-text">
-                                        <span>Авто-збагачення даних авто</span>
-                                        <span class="oscpv2-toggle-hint">Автоматично підтягує марку, модель, рік, паливо, VIN з OpenDataUA після завершення пошуку</span>
-                                    </span>
-                                </label>
-                            </div>
                         </section>
 
                         <section class="oscpv2-card oscpv2-car-lookup-card" id="oscpv2-car-lookup-card">
@@ -650,16 +640,6 @@
                 if (enrichBtn) enrichBtn.title = `Збагатити дані авто через ${(VEHICLE_SERVICES[service]||service)} API`;
             };
             if (cancelBtn) cancelBtn.onclick = () => { panel.style.display = 'none'; };
-        })();
-
-        // Auto-enrich toggle
-        (function() {
-            const toggleEl = modalEl.querySelector('#oscpv2-car-lookup-enable');
-            if (!toggleEl) return;
-            toggleEl.checked = GM_getValue('oscpv_b2b_auto_enrich', false);
-            toggleEl.onchange = function() {
-                GM_setValue('oscpv_b2b_auto_enrich', this.checked);
-            };
         })();
 
         // Car lookup search
@@ -1238,26 +1218,6 @@
             #oscpv2-modal .oscpv2-btn.oscpv2-btn-active {
                 background: rgba(7,44,44,0.08); color: var(--color-primary); border-color: var(--color-border-strong);
             }
-
-            /* TOGGLE */
-            #oscpv2-modal .oscpv2-toggle-wrap { margin-top: 12px; padding: 10px 12px;
-                background: var(--color-surface-2); border: 1px solid var(--color-border);
-                border-radius: var(--radius-md); }
-            #oscpv2-modal .oscpv2-toggle { display: flex; align-items: flex-start; gap: 10px;
-                cursor: pointer; user-select: none; }
-            #oscpv2-modal .oscpv2-toggle input { position: absolute; opacity: 0; pointer-events: none; }
-            #oscpv2-modal .oscpv2-toggle-slider { width: 36px; height: 20px; flex-shrink: 0;
-                background: var(--color-border); border-radius: 99px; position: relative;
-                transition: background 0.2s; margin-top: 1px; }
-            #oscpv2-modal .oscpv2-toggle-slider::after { content: '';
-                position: absolute; left: 2px; top: 2px; width: 16px; height: 16px;
-                background: #fff; border-radius: 50%; transition: transform 0.2s;
-                box-shadow: 0 1px 3px rgba(0,0,0,0.2); }
-            #oscpv2-modal .oscpv2-toggle input:checked + .oscpv2-toggle-slider { background: var(--color-secondary); }
-            #oscpv2-modal .oscpv2-toggle input:checked + .oscpv2-toggle-slider::after { transform: translateX(16px); }
-            #oscpv2-modal .oscpv2-toggle-text { display: flex; flex-direction: column;
-                flex: 1; gap: 2px; font-size: 13px; color: var(--color-text); font-weight: 500; }
-            #oscpv2-modal .oscpv2-toggle-hint { font-size: 11px; color: var(--color-text-muted); font-weight: 400; }
 
             /* CAR LOOKUP CARD */
             #oscpv2-modal .oscpv2-car-lookup-card { flex-shrink: 0; }
@@ -1963,15 +1923,6 @@
         if (stage) stage.textContent = 'ЗАВЕРШЕНО';
         if (info) info.textContent = `Готово: ${statsFound} полісів, ${statsEmpty} без даних`;
 
-        if (GM_getValue('oscpv_b2b_auto_enrich', false) && results.length > 0) {
-            const autoKey = GM_getValue('oscpv_odua_api_key', '');
-            if (!autoKey) {
-                log('Авто-збагачення: API ключ не встановлено — відкрийте ⚙ і збережіть ключ', 'warn');
-            } else {
-                log('Авто-збагачення: запуск...', 'info');
-                setTimeout(() => enrichResultsWithCarplates(), 300);
-            }
-        }
     }
 
     function escapeHtml(s) {
