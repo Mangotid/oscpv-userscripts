@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         OSCPV B2B — Пошук полісів (Odoo + Universalna)
 // @namespace    universalna.oscpv.b2b
-// @version      1.4.0-b2b
+// @version      1.5.0-b2b
 // @description  B2B: пакетний пошук полісів ОСЦПВ для юридичних осіб за ЄДРПОУ (incore + прямий парсинг таблиці + concurrency)
 // @author       custom
 // @match        https://odoo.icu.int/*
@@ -436,9 +436,19 @@
                                     <span class="oscpv2-unit">мс</span>
                                 </div>
                             </div>
+                            <div class="oscpv2-toggle-wrap">
+                                <label class="oscpv2-toggle">
+                                    <input type="checkbox" id="oscpv2-car-lookup-enable">
+                                    <span class="oscpv2-toggle-slider"></span>
+                                    <span class="oscpv2-toggle-text">
+                                        <span>Пошук авто за номером</span>
+                                        <span class="oscpv2-toggle-hint">Пряме звернення до OpenDataUA по номерному знаку або VIN</span>
+                                    </span>
+                                </label>
+                            </div>
                         </section>
 
-                        <section class="oscpv2-card oscpv2-car-lookup-card" id="oscpv2-car-lookup-card">
+                        <section class="oscpv2-card oscpv2-car-lookup-card" id="oscpv2-car-lookup-card" style="display:none">
                             <div class="oscpv2-card-header">
                                 <div class="oscpv2-card-title">
                                     <svg viewBox="0 0 20 20" fill="none" width="14" height="14" aria-hidden="true">
@@ -642,8 +652,19 @@
             if (cancelBtn) cancelBtn.onclick = () => { panel.style.display = 'none'; };
         })();
 
-        // Car lookup
+        // Car lookup toggle + search
         (function() {
+            const toggleEl = modalEl.querySelector('#oscpv2-car-lookup-enable');
+            const card     = modalEl.querySelector('#oscpv2-car-lookup-card');
+            if (toggleEl && card) {
+                const saved = GM_getValue('oscpv_car_lookup_enable', false);
+                toggleEl.checked = saved;
+                card.style.display = saved ? 'block' : 'none';
+                toggleEl.onchange = function() {
+                    card.style.display = this.checked ? 'block' : 'none';
+                    GM_setValue('oscpv_car_lookup_enable', this.checked);
+                };
+            }
             const input  = modalEl.querySelector('#oscpv2-car-lookup-input');
             const btn    = modalEl.querySelector('#oscpv2-car-lookup-btn');
             const result = modalEl.querySelector('#oscpv2-car-lookup-result');
@@ -1219,8 +1240,32 @@
                 background: rgba(7,44,44,0.08); color: var(--color-primary); border-color: var(--color-border-strong);
             }
 
+            /* TOGGLE */
+            #oscpv2-modal .oscpv2-toggle-wrap { margin-top: 12px; padding: 10px 12px;
+                background: var(--color-surface-2); border: 1px solid var(--color-border);
+                border-radius: var(--radius-md); }
+            #oscpv2-modal .oscpv2-toggle { display: flex; align-items: flex-start; gap: 10px;
+                cursor: pointer; user-select: none; }
+            #oscpv2-modal .oscpv2-toggle input { position: absolute; opacity: 0; pointer-events: none; }
+            #oscpv2-modal .oscpv2-toggle-slider { width: 36px; height: 20px; flex-shrink: 0;
+                background: var(--color-border); border-radius: 99px; position: relative;
+                transition: background 0.2s; margin-top: 1px; }
+            #oscpv2-modal .oscpv2-toggle-slider::after { content: '';
+                position: absolute; left: 2px; top: 2px; width: 16px; height: 16px;
+                background: #fff; border-radius: 50%; transition: transform 0.2s;
+                box-shadow: 0 1px 3px rgba(0,0,0,0.2); }
+            #oscpv2-modal .oscpv2-toggle input:checked + .oscpv2-toggle-slider { background: var(--color-secondary); }
+            #oscpv2-modal .oscpv2-toggle input:checked + .oscpv2-toggle-slider::after { transform: translateX(16px); }
+            #oscpv2-modal .oscpv2-toggle-text { display: flex; flex-direction: column;
+                flex: 1; gap: 2px; font-size: 13px; color: var(--color-text); font-weight: 500; }
+            #oscpv2-modal .oscpv2-toggle-hint { font-size: 11px; color: var(--color-text-muted); font-weight: 400; }
+
             /* CAR LOOKUP CARD */
             #oscpv2-modal .oscpv2-car-lookup-card { flex-shrink: 0; }
+            #oscpv2-modal .oscpv2-spinner { width: 14px; height: 14px; flex-shrink: 0;
+                border: 2px solid var(--color-border); border-top-color: var(--color-secondary);
+                border-radius: 50%; animation: oscpv2-spin 0.6s linear infinite; }
+            @keyframes oscpv2-spin { to { transform: rotate(360deg); } }
             #oscpv2-modal .oscpv2-car-lookup-row { display: flex; gap: 8px; align-items: center; margin-bottom: 10px; }
             #oscpv2-modal .oscpv2-car-lookup-input { flex: 1; font-family: var(--font-mono); font-size: 13px; font-weight: 600;
                 border: 1px solid var(--color-border); border-radius: var(--radius); padding: 8px 12px;
@@ -1281,7 +1326,7 @@
             { label: 'Паливо',      value: f(data.fuel) },
             { label: 'Двигун',      value: f(data.engine) },
             { label: 'Кузов',       value: [data.body, data.body_detail].filter(Boolean).join(' / ') || '—' },
-            { label: 'Маса',        value: f(data.weight) },
+            { label: 'Маса б/н / повна', value: [data.weight, data.total_weight].filter(Boolean).join(' / ') || '—' },
             { label: 'VIN',         value: f(data.vin) },
             { label: 'Регіон',      value: f(data.region) },
             { label: 'Власник',     value: f(data.owner_type) },
