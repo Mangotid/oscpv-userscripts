@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         OSCPV B2B — Пошук полісів (Odoo + Universalna)
 // @namespace    universalna.oscpv.b2b
-// @version      1.8.0-b2b
+// @version      1.9.0-b2b
 // @description  B2B: пакетний пошук полісів ОСЦПВ для юридичних осіб за ЄДРПОУ (incore + прямий парсинг таблиці + concurrency)
 // @author       custom
 // @match        https://odoo.icu.int/*
@@ -657,9 +657,31 @@
                 result.innerHTML = '<div class="oscpv2-car-lookup-loading"><div class="oscpv2-spinner"></div><span>Запит до OpenDataUA...</span></div>';
                 try {
                     const data = await fetchVehicleData(raw, isVin ? 'vin' : 'plate');
-                    result.innerHTML = data
-                        ? renderCarLookupResult(data)
-                        : '<div class="oscpv2-car-lookup-empty">Авто не знайдено в реєстрі МВС</div>';
+                    if (data) {
+                        result.innerHTML = renderCarLookupResult(data);
+                        const insBtn = result.querySelector('#oscpv2-car-ins-btn');
+                        if (insBtn) {
+                            insBtn.onclick = async () => {
+                                const plate = insBtn.dataset.plate;
+                                const insResult = result.querySelector('#oscpv2-car-ins-result');
+                                insBtn.disabled = true;
+                                insResult.style.display = 'block';
+                                insResult.innerHTML = '<div class="oscpv2-car-lookup-loading"><div class="oscpv2-spinner"></div><span>Запит до МТСБУ (до 6 хв)...</span></div>';
+                                try {
+                                    const ins = await fetchInsurance(plate);
+                                    insResult.innerHTML = ins
+                                        ? renderInsuranceResult(ins)
+                                        : '<div class="oscpv2-car-lookup-empty">Не вдалося перевірити</div>';
+                                } catch(e) {
+                                    insResult.innerHTML = '<div class="oscpv2-car-lookup-empty">Помилка запиту</div>';
+                                } finally {
+                                    insBtn.disabled = false;
+                                }
+                            };
+                        }
+                    } else {
+                        result.innerHTML = '<div class="oscpv2-car-lookup-empty">Авто не знайдено в реєстрі МВС</div>';
+                    }
                 } catch(e) {
                     result.innerHTML = '<div class="oscpv2-car-lookup-empty">Помилка запиту</div>';
                 } finally {
@@ -1255,6 +1277,22 @@
                 word-break: break-word; }
             #oscpv2-modal .oscpv2-car-lookup-source { font-size: 10px; color: var(--color-text-subtle); text-align: right; }
 
+            /* INSURANCE CHECK */
+            #oscpv2-modal .oscpv2-car-insurance-wrap { display: flex; flex-direction: column; gap: 8px; }
+            #oscpv2-modal .oscpv2-car-ins-btn { width: 100%; justify-content: center; font-size: 11px; }
+            #oscpv2-modal .oscpv2-car-ins-result { display: flex; flex-direction: column; }
+            #oscpv2-modal .oscpv2-car-ins-none { background: var(--color-surface-2); border: 1px solid var(--color-border); border-radius: var(--radius-md); padding: 10px 12px; font-size: 12px; color: var(--color-text-muted); text-align: center; }
+            #oscpv2-modal .oscpv2-car-ins-card { border-radius: var(--radius-md); padding: 10px 12px; border: 1px solid; }
+            #oscpv2-modal .oscpv2-car-ins-active { background: var(--color-success-bg); border-color: var(--color-success); }
+            #oscpv2-modal .oscpv2-car-ins-inactive { background: var(--color-danger-bg); border-color: var(--color-danger); }
+            #oscpv2-modal .oscpv2-car-ins-status { font-family: var(--font-display); font-size: 11px; font-weight: 700; letter-spacing: 0.08em; margin-bottom: 8px; }
+            #oscpv2-modal .oscpv2-car-ins-active .oscpv2-car-ins-status { color: var(--color-success-text); }
+            #oscpv2-modal .oscpv2-car-ins-inactive .oscpv2-car-ins-status { color: var(--color-danger); }
+            #oscpv2-modal .oscpv2-car-ins-rows { display: flex; flex-direction: column; gap: 4px; }
+            #oscpv2-modal .oscpv2-car-ins-row { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; font-size: 11px; }
+            #oscpv2-modal .oscpv2-car-ins-row span:first-child { color: var(--color-text-muted); flex-shrink: 0; }
+            #oscpv2-modal .oscpv2-car-ins-row span:last-child { font-weight: 600; color: var(--color-text); text-align: right; }
+
             /* RESPONSIVE */
             @media (max-width: 920px) {
                 #oscpv2-modal .oscpv2-body { grid-template-columns: 1fr; }
@@ -1325,7 +1363,18 @@
                         <div class="oscpv2-car-lookup-field-value">${fd.value}</div>
                     </div>`).join('')}
             </div>
-            ${sourceNote}`;
+            ${sourceNote}
+            ${data.plate ? `
+            <div class="oscpv2-car-insurance-wrap">
+                <button type="button" class="oscpv2-btn oscpv2-car-ins-btn" id="oscpv2-car-ins-btn" data-plate="${data.plate}">
+                    <svg viewBox="0 0 20 20" fill="none" width="13" height="13" aria-hidden="true">
+                        <path d="M10 2L3 5v5c0 4.5 3.1 8.7 7 9.8 3.9-1.1 7-5.3 7-9.8V5L10 2z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                        <path d="M7.5 10l2 2 3-3" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+                    </svg>
+                    СТРАХОВКА МТСБУ
+                </button>
+                <div class="oscpv2-car-ins-result" id="oscpv2-car-ins-result" style="display:none"></div>
+            </div>` : ''}`;
     }
 
     // ====== Vehicle API settings ======
@@ -1379,6 +1428,7 @@
                             if (!json.success || !json.data) { resolve(null); return; }
                             const d = json.data;
                             resolve({
+                                plate: type === 'plate' ? identifier : '',
                                 brand: d.brand||'', model: d.model||'',
                                 year: d.make_year ? String(d.make_year) : '',
                                 fuel: d.fuel||'',
@@ -1410,6 +1460,7 @@
                             if (!json.records || !json.records.length) { resolve(null); return; }
                             const d = json.records[0];
                             resolve({
+                                plate: type === 'plate' ? identifier : (d.plate||''),
                                 brand: d.brand||'', model: d.model||'',
                                 year: d.year ? String(d.year) : '',
                                 fuel: d.fuel_type||'',
@@ -1432,6 +1483,55 @@
                 });
             }
         });
+    }
+
+    function fetchInsurance(plate) {
+        return new Promise(resolve => {
+            const { service, customUrl, apiKey } = getVehicleApiSettings();
+            const key = apiKey || getOduaApiKey();
+            if (!key) { resolve(null); return; }
+            const baseUrl = (service === 'custom' && customUrl)
+                ? customUrl.replace(/\/$/, '')
+                : 'https://opendata.universalnabaza.com.ua';
+            GM_xmlhttpRequest({
+                method: 'GET',
+                url: `${baseUrl}/api/v1/cars/plate/${encodeURIComponent(plate)}/insurance`,
+                headers: { 'X-Api-Key': key },
+                timeout: 390000,
+                onload: resp => {
+                    try {
+                        if (resp.status !== 200) { resolve(null); return; }
+                        resolve(JSON.parse(resp.responseText));
+                    } catch(e) { resolve(null); }
+                },
+                onerror: () => resolve(null), ontimeout: () => resolve(null)
+            });
+        });
+    }
+
+    function renderInsuranceResult(ins) {
+        if (!ins.found) {
+            return '<div class="oscpv2-car-ins-none">Активного полісу ОСЦПВВНТЗ не знайдено</div>';
+        }
+        const statusClass = ins.status === 'active' ? 'active' : 'inactive';
+        const statusLabel = ins.status === 'active' ? 'ДІЮЧИЙ' : 'НЕДІЮЧИЙ';
+        const rows = [
+            ins.policy_number && ['Поліс №', ins.policy_number],
+            ins.insurer_name  && ['Страховик', ins.insurer_name],
+            ins.start_date    && ['Дія з', ins.start_date],
+            ins.end_date      && ['Дія по', ins.end_date],
+            ins.insurer_phone && ['Телефон', ins.insurer_phone],
+        ].filter(Boolean);
+        return `
+            <div class="oscpv2-car-ins-card oscpv2-car-ins-${statusClass}">
+                <div class="oscpv2-car-ins-status">${statusLabel}</div>
+                <div class="oscpv2-car-ins-rows">
+                    ${rows.map(([l, v]) => `
+                        <div class="oscpv2-car-ins-row">
+                            <span>${l}</span><span>${v}</span>
+                        </div>`).join('')}
+                </div>
+            </div>`;
     }
 
     async function enrichResultsWithCarplates() {
