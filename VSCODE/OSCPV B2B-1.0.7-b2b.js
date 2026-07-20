@@ -1,13 +1,14 @@
 // ==UserScript==
 // @name         OSCPV B2B — Пошук полісів (Odoo + Universalna)
 // @namespace    universalna.oscpv.b2b
-// @version      1.9.1-b2b
+// @version      1.9.2-b2b
 // @description  B2B: пакетний пошук полісів ОСЦПВ для юридичних осіб за ЄДРПОУ (incore + прямий парсинг таблиці + concurrency)
 // @author       custom
 // @match        https://odoo.icu.int/*
 // @match        https://odoo.universalna.com/*
 // @match        https://dict.universalna.com/*
 // @match        https://incore.universalna.com/*
+// @match        https://opendata.universalnabaza.com.ua/*
 // @require      https://cdn.jsdelivr.net/npm/xlsx-js-style@1.2.0/dist/xlsx.bundle.js
 // @grant        GM_xmlhttpRequest
 // @grant        GM_setValue
@@ -296,7 +297,7 @@
     // =====================================================================
     const host = location.hostname;
 
-    if (host === 'odoo.icu.int' || host === 'odoo.universalna.com') {
+    if (host === 'odoo.icu.int' || host === 'odoo.universalna.com' || host === 'opendata.universalnabaza.com.ua') {
         initOdooSide();
     } else if (host === 'dict.universalna.com') {
         initDictSide();
