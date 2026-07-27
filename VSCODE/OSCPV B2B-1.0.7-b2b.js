@@ -2057,7 +2057,7 @@
         // Розраховує дату закінчення дії полісу: початок + місяці - 1 день
         function calcEndDate(startStr, periodMonths) {
             if (!startStr) return '';
-            const m = startStr.match(/^(\d{2})\.(\d{2})\.(\d{4})$/);
+            const m = String(startStr).match(/^(\d{2})\.(\d{2})\.(\d{4})$/);
             if (!m) return '';
             const d = new Date(+m[3], +m[2] - 1, +m[1]);
             d.setMonth(d.getMonth() + (parseInt(periodMonths) || 12));
