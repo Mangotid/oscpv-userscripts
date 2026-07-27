@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         OSCPV B2B — Пошук полісів (Odoo + Universalna)
 // @namespace    universalna.oscpv.b2b
-// @version      1.9.7-b2b
+// @version      1.9.8-b2b
 // @description  B2B: пакетний пошук полісів ОСЦПВ для юридичних осіб за ЄДРПОУ (incore + прямий парсинг таблиці + concurrency)
 // @author       custom
 // @updateURL    https://raw.githubusercontent.com/Mangotid/oscpv-userscripts/main/VSCODE/OSCPV%20B2B-1.0.7-b2b.js
@@ -433,6 +433,12 @@
                                 </span>
                                 <button type="button" class="oscpv2-btn" id="oscpv2-apikey-change" style="font-size:11px;padding:4px 10px">ЗМІНИТИ</button>
                             </div>
+                            <p id="oscpv2-apikey-lock-hint" class="oscpv2-apikey-lock-hint" style="display:none">
+                                <svg viewBox="0 0 20 20" fill="none" width="11" height="11" aria-hidden="true" style="flex-shrink:0;margin-top:1px">
+                                    <path d="M10 2a3 3 0 0 0-3 3v2H5a1 1 0 0 0-1 1v8a1 1 0 0 0 1 1h10a1 1 0 0 0 1-1V8a1 1 0 0 0-1-1h-2V5a3 3 0 0 0-3-3z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                                </svg>
+                                Введіть API ключ щоб розблокувати пошук
+                            </p>
                         </section>
 
                         <section class="oscpv2-card">
@@ -549,31 +555,6 @@
                                     </svg>
                                     ЗБАГАТИТИ АВТО
                                 </button>
-                                <button type="button" class="oscpv2-btn" id="oscpv2-vehicle-settings-btn" title="Налаштування API авто" style="font-size:11px;padding:6px 8px">
-                                    <svg viewBox="0 0 16 16" fill="none" width="13" height="13" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="8" r="2.5"/><path d="M8 1v2M8 13v2M1 8h2M13 8h2M3.22 3.22l1.42 1.42M11.36 11.36l1.42 1.42M3.22 12.78l1.42-1.42M11.36 4.64l1.42-1.42"/></svg>
-                                </button>
-                                </div>
-                                <div id="oscpv2-vehicle-settings-panel" class="oscpv2-api-settings-panel" style="display:none">
-                                    <div class="oscpv2-api-settings-row">
-                                        <span class="oscpv2-api-settings-label">Сервіс</span>
-                                        <select id="oscpv2-vehicle-service-select">
-                                            <option value="opendata">OpenDataUA (власний)</option>
-                                            <option value="carplates">carplates.app</option>
-                                            <option value="custom">Власний URL</option>
-                                        </select>
-                                    </div>
-                                    <div class="oscpv2-api-settings-row" id="oscpv2-vehicle-url-row" style="display:none">
-                                        <span class="oscpv2-api-settings-label">URL</span>
-                                        <input type="text" id="oscpv2-vehicle-url-input" placeholder="https://opendata.universalnabaza.com.ua">
-                                    </div>
-                                    <div class="oscpv2-api-settings-row">
-                                        <span class="oscpv2-api-settings-label">API ключ</span>
-                                        <input type="password" id="oscpv2-vehicle-key-input" placeholder="odua_xxx... або DEMOdemo...">
-                                    </div>
-                                    <div style="display:flex;gap:6px;justify-content:flex-end;margin-top:2px">
-                                        <button type="button" class="oscpv2-btn" id="oscpv2-vehicle-settings-cancel" style="font-size:11px;padding:4px 10px">СКАСУВАТИ</button>
-                                        <button type="button" class="oscpv2-btn" id="oscpv2-vehicle-settings-save" style="font-size:11px;padding:4px 10px">ЗБЕРЕГТИ</button>
-                                    </div>
                                 </div>
                             </div>
                             <div class="oscpv2-tabs-wrap">
@@ -657,16 +638,27 @@
             const saveBtn   = modalEl.querySelector('#oscpv2-apikey-save');
             const changeBtn = modalEl.querySelector('#oscpv2-apikey-change');
 
+            function setStartLock(locked) {
+                const startBtn  = modalEl.querySelector('#oscpv2-start');
+                const textarea  = modalEl.querySelector('#oscpv2-ipns');
+                const lockHint  = modalEl.querySelector('#oscpv2-apikey-lock-hint');
+                if (startBtn)  startBtn.disabled  = locked;
+                if (textarea)  textarea.disabled  = locked;
+                if (lockHint)  lockHint.style.display = locked ? 'block' : 'none';
+            }
+
             function refreshApiKeyCard() {
                 const stored = GM_getValue('oscpv_odua_api_key', '');
                 if (stored) {
                     inputRow.style.display = 'none';
                     savedRow.style.display = 'flex';
                     card.classList.remove('oscpv2-apikey-card--empty');
+                    setStartLock(false);
                 } else {
                     inputRow.style.display = 'flex';
                     savedRow.style.display = 'none';
                     card.classList.add('oscpv2-apikey-card--empty');
+                    setStartLock(true);
                 }
             }
 
@@ -674,10 +666,8 @@
                 const val = (keyInput.value || '').trim();
                 if (!val) { keyInput.focus(); return; }
                 GM_setValue('oscpv_odua_api_key', val);
-                // sync з панеллю налаштувань
-                const panelInput = modalEl.querySelector('#oscpv2-vehicle-key-input');
-                if (panelInput) panelInput.value = val;
                 refreshApiKeyCard();
+                setStartLock(false);
             };
 
             changeBtn.onclick = () => {
@@ -685,6 +675,7 @@
                 inputRow.style.display = 'flex';
                 savedRow.style.display = 'none';
                 card.classList.add('oscpv2-apikey-card--empty');
+                setStartLock(true);
                 keyInput.focus();
             };
 
@@ -701,43 +692,7 @@
             toggle.onchange = () => GM_setValue('oscpv_auto_enrich', toggle.checked ? 'on' : 'off');
         })();
 
-        // Vehicle API settings panel (B2B)
-        (function() {
-            const panel     = modalEl.querySelector('#oscpv2-vehicle-settings-panel');
-            const gearBtn   = modalEl.querySelector('#oscpv2-vehicle-settings-btn');
-            const svcSel    = modalEl.querySelector('#oscpv2-vehicle-service-select');
-            const urlRow    = modalEl.querySelector('#oscpv2-vehicle-url-row');
-            const urlInput  = modalEl.querySelector('#oscpv2-vehicle-url-input');
-            const keyInput  = modalEl.querySelector('#oscpv2-vehicle-key-input');
-            const saveBtn   = modalEl.querySelector('#oscpv2-vehicle-settings-save');
-            const cancelBtn = modalEl.querySelector('#oscpv2-vehicle-settings-cancel');
-            if (gearBtn) gearBtn.onclick = () => {
-                const open = panel.style.display !== 'none';
-                panel.style.display = open ? 'none' : 'flex';
-                if (!open) {
-                    const s = getVehicleApiSettings();
-                    svcSel.value   = s.service;
-                    urlInput.value = s.customUrl;
-                    keyInput.value = s.apiKey;
-                    urlRow.style.display = s.service === 'custom' ? 'flex' : 'none';
-                }
-            };
-            if (svcSel) svcSel.onchange = function() {
-                urlRow.style.display = this.value === 'custom' ? 'flex' : 'none';
-            };
-            if (saveBtn) saveBtn.onclick = () => {
-                const service = svcSel.value;
-                const url     = urlInput.value.trim();
-                const key     = keyInput.value.trim();
-                GM_setValue('oscpv_vehicle_service', service);
-                GM_setValue('oscpv_vehicle_custom_url', url);
-                if (key) GM_setValue('oscpv_odua_api_key', key);
-                panel.style.display = 'none';
-                const enrichBtn = document.getElementById('oscpv2-enrich-btn');
-                if (enrichBtn) enrichBtn.title = `Збагатити дані авто через ${(VEHICLE_SERVICES[service]||service)} API`;
-            };
-            if (cancelBtn) cancelBtn.onclick = () => { panel.style.display = 'none'; };
-        })();
+
 
         // Car lookup search
         (function() {
@@ -1430,6 +1385,13 @@
                 display: flex; align-items: center; gap: 6px;
                 font-family: var(--font-mono); font-size: 12px;
                 color: var(--color-success-text); font-weight: 600;
+            }
+            #oscpv2-modal .oscpv2-apikey-lock-hint {
+                display: flex; align-items: flex-start; gap: 5px;
+                margin: 8px 0 0; padding: 0;
+                font-family: var(--font-display); font-size: 10px; font-weight: 600;
+                letter-spacing: 0.06em; text-transform: uppercase;
+                color: var(--color-secondary);
             }
 
             /* RESPONSIVE */
