@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         OSCPV B2B — Пошук полісів (Odoo + Universalna)
 // @namespace    universalna.oscpv.b2b
-// @version      1.9.6-b2b
+// @version      1.9.7-b2b
 // @description  B2B: пакетний пошук полісів ОСЦПВ для юридичних осіб за ЄДРПОУ (incore + прямий парсинг таблиці + concurrency)
 // @author       custom
 // @updateURL    https://raw.githubusercontent.com/Mangotid/oscpv-userscripts/main/VSCODE/OSCPV%20B2B-1.0.7-b2b.js
@@ -410,6 +410,31 @@
 
                     <!-- LEFT — INPUT + PROGRESS -->
                     <div class="oscpv2-left">
+                        <section class="oscpv2-card oscpv2-apikey-card" id="oscpv2-apikey-card">
+                            <div class="oscpv2-card-header" style="margin-bottom:10px">
+                                <div class="oscpv2-card-title">
+                                    <svg viewBox="0 0 20 20" fill="none" width="14" height="14" aria-hidden="true">
+                                        <path d="M10 2a3 3 0 0 0-3 3v2H5a1 1 0 0 0-1 1v8a1 1 0 0 0 1 1h10a1 1 0 0 0 1-1V8a1 1 0 0 0-1-1h-2V5a3 3 0 0 0-3-3z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                                        <circle cx="10" cy="12" r="1.5" stroke="currentColor" stroke-width="1.5"/>
+                                    </svg>
+                                    API КЛЮЧ OPENDATA
+                                </div>
+                            </div>
+                            <div id="oscpv2-apikey-input-row" style="display:flex;gap:8px;align-items:center">
+                                <input type="password" id="oscpv2-apikey-input" class="oscpv2-car-lookup-input" placeholder="odua_xxx..." style="flex:1;font-size:12px">
+                                <button type="button" class="oscpv2-btn oscpv2-btn-primary" id="oscpv2-apikey-save" style="font-size:11px;padding:6px 12px;flex-shrink:0">ЗБЕРЕГТИ</button>
+                            </div>
+                            <div id="oscpv2-apikey-saved-row" style="display:none;align-items:center;gap:8px;justify-content:space-between">
+                                <span class="oscpv2-apikey-ok">
+                                    <svg viewBox="0 0 20 20" fill="none" width="12" height="12" aria-hidden="true">
+                                        <path d="M4 10l5 5 7-8" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                                    </svg>
+                                    Ключ встановлено
+                                </span>
+                                <button type="button" class="oscpv2-btn" id="oscpv2-apikey-change" style="font-size:11px;padding:4px 10px">ЗМІНИТИ</button>
+                            </div>
+                        </section>
+
                         <section class="oscpv2-card">
                             <div class="oscpv2-card-header">
                                 <div class="oscpv2-card-title">
@@ -438,6 +463,22 @@
                                     <input type="number" id="oscpv2-delay-ipn" value="${CONFIG.DELAY_BETWEEN_IPN}" min="0" step="500">
                                     <span class="oscpv2-unit">мс</span>
                                 </div>
+                            </div>
+
+                            <div class="oscpv2-toggle-row">
+                                <span class="oscpv2-toggle-label">
+                                    <svg viewBox="0 0 20 20" fill="none" width="13" height="13" aria-hidden="true">
+                                        <path d="M4 10a6 6 0 0 1 6-6 6 6 0 0 1 4.24 1.76" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                                        <path d="M14 5V2M14 5h-3" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                                        <path d="M16 10a6 6 0 0 1-10 4.24" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                                    </svg>
+                                    АВТО-ЗБАГАЧЕННЯ
+                                </span>
+                                <label class="oscpv2-toggle" title="Автоматично збагачувати дані ТЗ після пошуку">
+                                    <input type="checkbox" id="oscpv2-auto-enrich-toggle" checked>
+                                    <span class="oscpv2-toggle-track"></span>
+                                    <span class="oscpv2-toggle-thumb"></span>
+                                </label>
                             </div>
                         </section>
 
@@ -606,6 +647,59 @@
         modalEl.querySelector('#oscpv2-export').onclick = exportExcel;
         modalEl.querySelector('#oscpv2-toggle-log').onclick = toggleLog;
         modalEl.querySelector('#oscpv2-enrich-btn').onclick = enrichResultsWithCarplates;
+
+        // API key card — запит та збереження ключа в UI
+        (function() {
+            const card      = modalEl.querySelector('#oscpv2-apikey-card');
+            const inputRow  = modalEl.querySelector('#oscpv2-apikey-input-row');
+            const savedRow  = modalEl.querySelector('#oscpv2-apikey-saved-row');
+            const keyInput  = modalEl.querySelector('#oscpv2-apikey-input');
+            const saveBtn   = modalEl.querySelector('#oscpv2-apikey-save');
+            const changeBtn = modalEl.querySelector('#oscpv2-apikey-change');
+
+            function refreshApiKeyCard() {
+                const stored = GM_getValue('oscpv_odua_api_key', '');
+                if (stored) {
+                    inputRow.style.display = 'none';
+                    savedRow.style.display = 'flex';
+                    card.classList.remove('oscpv2-apikey-card--empty');
+                } else {
+                    inputRow.style.display = 'flex';
+                    savedRow.style.display = 'none';
+                    card.classList.add('oscpv2-apikey-card--empty');
+                }
+            }
+
+            saveBtn.onclick = () => {
+                const val = (keyInput.value || '').trim();
+                if (!val) { keyInput.focus(); return; }
+                GM_setValue('oscpv_odua_api_key', val);
+                // sync з панеллю налаштувань
+                const panelInput = modalEl.querySelector('#oscpv2-vehicle-key-input');
+                if (panelInput) panelInput.value = val;
+                refreshApiKeyCard();
+            };
+
+            changeBtn.onclick = () => {
+                keyInput.value = '';
+                inputRow.style.display = 'flex';
+                savedRow.style.display = 'none';
+                card.classList.add('oscpv2-apikey-card--empty');
+                keyInput.focus();
+            };
+
+            keyInput.addEventListener('keydown', e => { if (e.key === 'Enter') saveBtn.click(); });
+
+            refreshApiKeyCard();
+        })();
+
+        // Перемикач авто-збагачення
+        (function() {
+            const toggle = modalEl.querySelector('#oscpv2-auto-enrich-toggle');
+            if (!toggle) return;
+            toggle.checked = GM_getValue('oscpv_auto_enrich', 'on') === 'on';
+            toggle.onchange = () => GM_setValue('oscpv_auto_enrich', toggle.checked ? 'on' : 'off');
+        })();
 
         // Vehicle API settings panel (B2B)
         (function() {
@@ -1296,6 +1390,48 @@
             #oscpv2-modal .oscpv2-car-ins-row span:first-child { color: var(--color-text-muted); flex-shrink: 0; }
             #oscpv2-modal .oscpv2-car-ins-row span:last-child { font-weight: 600; color: var(--color-text); text-align: right; }
 
+            /* TOGGLE SWITCH */
+            #oscpv2-modal .oscpv2-toggle-row {
+                display: flex; align-items: center; justify-content: space-between;
+                margin-top: 12px; padding-top: 10px;
+                border-top: 1px solid var(--color-border);
+            }
+            #oscpv2-modal .oscpv2-toggle-label {
+                font-family: var(--font-display); font-size: 10px; font-weight: 600;
+                color: var(--color-text-muted); letter-spacing: 0.08em; text-transform: uppercase;
+                display: flex; align-items: center; gap: 6px; user-select: none;
+            }
+            #oscpv2-modal .oscpv2-toggle {
+                position: relative; display: inline-block; width: 36px; height: 20px; flex-shrink: 0; cursor: pointer;
+            }
+            #oscpv2-modal .oscpv2-toggle input {
+                opacity: 0; width: 0; height: 0; position: absolute;
+            }
+            #oscpv2-modal .oscpv2-toggle-track {
+                position: absolute; inset: 0; border-radius: 99px;
+                background: var(--color-border-strong);
+                transition: background var(--duration) var(--ease);
+            }
+            #oscpv2-modal .oscpv2-toggle input:checked + .oscpv2-toggle-track {
+                background: var(--color-primary);
+            }
+            #oscpv2-modal .oscpv2-toggle-thumb {
+                position: absolute; top: 2px; left: 2px;
+                width: 16px; height: 16px; border-radius: 50%; background: #fff;
+                transition: left var(--duration) var(--ease); pointer-events: none;
+                box-shadow: 0 1px 3px rgba(0,0,0,0.18);
+            }
+            #oscpv2-modal .oscpv2-toggle input:checked ~ .oscpv2-toggle-thumb { left: 18px; }
+
+            /* API KEY CARD */
+            #oscpv2-modal .oscpv2-apikey-card { border-left: 3px solid var(--color-secondary); }
+            #oscpv2-modal .oscpv2-apikey-card--empty { background: rgba(255,95,3,0.04); }
+            #oscpv2-modal .oscpv2-apikey-ok {
+                display: flex; align-items: center; gap: 6px;
+                font-family: var(--font-mono); font-size: 12px;
+                color: var(--color-success-text); font-weight: 600;
+            }
+
             /* RESPONSIVE */
             @media (max-width: 920px) {
                 #oscpv2-modal .oscpv2-body { grid-template-columns: 1fr; }
@@ -1393,12 +1529,7 @@
     }
 
     function getOduaApiKey() {
-        let key = GM_getValue('oscpv_odua_api_key', '');
-        if (!key) {
-            key = (prompt('Введіть API ключ (odua_xxx...):') || '').trim();
-            if (key) GM_setValue('oscpv_odua_api_key', key);
-        }
-        return key;
+        return GM_getValue('oscpv_odua_api_key', '');
     }
 
     function _mapCalcCategory(d) {
@@ -2032,9 +2163,10 @@
         if (stage) stage.textContent = 'ЗАВЕРШЕНО';
         if (info) info.textContent = `Готово: ${statsFound} полісів, ${statsEmpty} без даних`;
 
-        // Авто-збагачення ТЗ з OpenDataUA якщо ключ налаштовано
-        const _odApiKey = GM_getValue('oscpv_odua_api_key', '') || getOduaApiKey();
-        if (_odApiKey && results.filter(r => !r._notFound).length > 0) {
+        // Авто-збагачення ТЗ з OpenDataUA якщо ключ налаштовано і перемикач увімкнено
+        const _odApiKey = GM_getValue('oscpv_odua_api_key', '');
+        const _autoEnrich = GM_getValue('oscpv_auto_enrich', 'on') === 'on';
+        if (_autoEnrich && _odApiKey && results.filter(r => !r._notFound).length > 0) {
             enrichResultsWithCarplates();
         }
 
