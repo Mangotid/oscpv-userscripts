@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         OSCPV B2B — Пошук полісів (Odoo + Universalna)
 // @namespace    universalna.oscpv.b2b
-// @version      1.9.3-b2b
+// @version      1.9.4-b2b
 // @description  B2B: пакетний пошук полісів ОСЦПВ для юридичних осіб за ЄДРПОУ (incore + прямий парсинг таблиці + concurrency)
 // @author       custom
 // @match        https://odoo.icu.int/*
@@ -2054,6 +2054,17 @@
         const today = new Date();
         const todayIso = today.toISOString().slice(0, 10);
 
+        // Розраховує дату закінчення дії полісу: початок + місяці - 1 день
+        function calcEndDate(startStr, periodMonths) {
+            if (!startStr) return '';
+            const m = startStr.match(/^(\d{2})\.(\d{2})\.(\d{4})$/);
+            if (!m) return '';
+            const d = new Date(+m[3], +m[2] - 1, +m[1]);
+            d.setMonth(d.getMonth() + (parseInt(periodMonths) || 12));
+            d.setDate(d.getDate() - 1);
+            return `${String(d.getDate()).padStart(2,'0')}.${String(d.getMonth()+1).padStart(2,'0')}.${d.getFullYear()}`;
+        }
+
         // ── Стилі ──────────────────────────────────────────────────────
         const THIN = s => ({ style: 'thin', color: { rgb: s } });
         const mkBorder = s => ({ top: THIN(s), bottom: THIN(s), left: THIN(s), right: THIN(s) });
@@ -2100,6 +2111,24 @@
             alignment: { horizontal: 'right', vertical: 'top', wrapText: false },
             border: mkBorder('F0D8CC')
         };
+        const S_DATES_HDR = {
+            font: { name: 'Arial', sz: 11, bold: true, color: { rgb: 'FFFFFF' } },
+            fill: { patternType: 'solid', fgColor: { rgb: '1A5E46' } },
+            alignment: { horizontal: 'center', vertical: 'center', wrapText: true },
+            border: mkBorder('0F3D2E')
+        };
+        const S_DATES_REF = {
+            font: { name: 'Arial', sz: 10, color: { rgb: '555555' } },
+            fill: { patternType: 'solid', fgColor: { rgb: 'F2F2F2' } },
+            alignment: { horizontal: 'left', vertical: 'top', wrapText: false },
+            border: mkBorder('CCCCCC')
+        };
+        const S_DATES_INPUT = {
+            font: { name: 'Arial', sz: 10, color: { rgb: '1A1A1A' } },
+            fill: { patternType: 'solid', fgColor: { rgb: 'FFFDE7' } },
+            alignment: { horizontal: 'center', vertical: 'top', wrapText: false },
+            border: mkBorder('FBC02D')
+        };
 
         function applyStyle(ws, r, c, style) {
             const addr = XLSX.utils.encode_cell({ r, c });
@@ -2108,35 +2137,37 @@
         }
 
         // ── Sheet 1: Деталі полісів ─────────────────────────────────────
-        // Колонки A–W (23):
-        //   A-B  : ЄДРПОУ / Компанія
-        //   C-G  : Поліс ОСЦПВ (5)
-        //   H-L  : Транспортний засіб — МТСБУ (5)
-        //   M-S  : Збагачення OpenDataUA (7)
-        //   T-W  : Збитковість (4)
+        // Колонки A–X (24):
+        //   A-B  : ЄДРПОУ / Компанія         (2)
+        //   C-H  : Поліс ОСЦПВ               (6) — Серія, №, СК, Поч., Кін., Строк
+        //   I-M  : Транспортний засіб МТСБУ  (5)
+        //   N-T  : Дані OpenDataUA            (7)
+        //   U-X  : Збитковість                (4)
 
         const grpRow = [
             'ЄДРПОУ / Компанія', '',
-            'Поліс ОСЦПВ', '', '', '', '',
+            'Поліс ОСЦПВ', '', '', '', '', '',
             'Транспортний засіб (МТСБУ)', '', '', '', '',
             'Дані OpenDataUA', '', '', '', '', '', '',
             'Збитковість', '', '', ''
         ];
         const hdrRow = [
             'ЄДРПОУ', 'Назва компанії',
-            'Серія', '№ полісу', 'Страховик (СК)', 'Дата початку', 'Строк дії',
+            'Серія', '№ полісу', 'Страховик (СК)', 'Дата початку', 'Дата закінчення', 'Строк дії',
             'Держ. номер', 'VIN', 'Тип ТЗ', 'Марка ТЗ', 'Повна назва ТЗ',
             'Марка', 'Модель', 'Рік', 'Паливо', 'Двигун', 'Маса', 'Регіон',
             'К-сть подій', 'Нараховано, грн', 'Виплачено, грн', 'Резерв, грн'
         ];
 
-        const dataRows1 = results.filter(r => !r._notFound).map(r => [
+        const policyRows = results.filter(r => !r._notFound);
+        const dataRows1 = policyRows.map(r => [
             r.ipn || '',
             r.full_name || '',
             r.policy_series || '',
             r.policy_no || '',
             r.insurer_name || '',
-            r.start_date || '',
+            r.start_date || '',                             // F — замінено VLOOKUP нижче
+            calcEndDate(r.start_date, r.validity_period),  // G — замінено VLOOKUP нижче
             r.validity_period || '',
             r.plate_no || '',
             r.vin || '',
@@ -2156,16 +2187,36 @@
             r.reserved_loss_amount !== undefined ? (parseFloat(r.reserved_loss_amount) || 0) : ''
         ]);
 
-        const NC1 = 23;
+        const NC1 = 24;
         const aoa1 = [grpRow, hdrRow, ...dataRows1];
         const ws1 = XLSX.utils.aoa_to_sheet(aoa1);
 
+        // Замінюємо колонки F (5) та G (6) на VLOOKUP з листа "Дати полісів"
+        for (let i = 0; i < dataRows1.length; i++) {
+            const excelRow = i + 3;  // рядок Excel (1-indexed), дані починаються з рядка 3
+            const sheetRow = i + 2;  // 0-indexed рядок у ws1
+
+            const fAddr = XLSX.utils.encode_cell({ r: sheetRow, c: 5 });
+            ws1[fAddr] = {
+                t: 'f',
+                f: `IFERROR(VLOOKUP(D${excelRow},'Дати полісів'!$A:$D,3,0),"")`,
+                v: dataRows1[i][5] || ''
+            };
+
+            const gAddr = XLSX.utils.encode_cell({ r: sheetRow, c: 6 });
+            ws1[gAddr] = {
+                t: 'f',
+                f: `IFERROR(VLOOKUP(D${excelRow},'Дати полісів'!$A:$D,4,0),"")`,
+                v: dataRows1[i][6] || ''
+            };
+        }
+
         ws1['!merges'] = [
             { s: { r: 0, c: 0 },  e: { r: 0, c: 1 } },
-            { s: { r: 0, c: 2 },  e: { r: 0, c: 6 } },
-            { s: { r: 0, c: 7 },  e: { r: 0, c: 11 } },
-            { s: { r: 0, c: 12 }, e: { r: 0, c: 18 } },
-            { s: { r: 0, c: 19 }, e: { r: 0, c: 22 } }
+            { s: { r: 0, c: 2 },  e: { r: 0, c: 7 } },
+            { s: { r: 0, c: 8 },  e: { r: 0, c: 12 } },
+            { s: { r: 0, c: 13 }, e: { r: 0, c: 19 } },
+            { s: { r: 0, c: 20 }, e: { r: 0, c: 23 } }
         ];
 
         for (let c = 0; c < NC1; c++) {
@@ -2174,13 +2225,13 @@
         }
         for (let row = 2; row < aoa1.length; row++) {
             for (let c = 0; c < NC1; c++) {
-                applyStyle(ws1, row, c, c >= 19 ? S_NUM : S_DAT);
+                applyStyle(ws1, row, c, c >= 20 ? S_NUM : S_DAT);
             }
         }
 
         ws1['!cols'] = [
             { wch: 12 }, { wch: 32 },
-            { wch: 8 },  { wch: 16 }, { wch: 28 }, { wch: 12 }, { wch: 10 },
+            { wch: 8 },  { wch: 16 }, { wch: 28 }, { wch: 13 }, { wch: 13 }, { wch: 10 },
             { wch: 14 }, { wch: 20 }, { wch: 40 }, { wch: 18 }, { wch: 32 },
             { wch: 16 }, { wch: 16 }, { wch: 6 },  { wch: 12 }, { wch: 12 }, { wch: 12 }, { wch: 16 },
             { wch: 10 }, { wch: 16 }, { wch: 16 }, { wch: 16 }
@@ -2201,8 +2252,8 @@
             const s = summaryMap[r.ipn];
             s.policies++;
             s.vehicles.add(r.vin || r.plate_no || `_${r.policy_no}`);
-            s.total += parseFloat(r.total_loss_amount) || 0;
-            s.paid  += parseFloat(r.paid_loss_amount)  || 0;
+            s.total    += parseFloat(r.total_loss_amount)    || 0;
+            s.paid     += parseFloat(r.paid_loss_amount)     || 0;
             s.reserved += parseFloat(r.reserved_loss_amount) || 0;
         }
 
@@ -2231,10 +2282,39 @@
         ];
         ws2['!rows'] = [{ hpt: 24 }];
 
+        // ── Sheet 3: Дати полісів ──────────────────────────────────────
+        // Довідник. Колонки A-B — ключ (сірий, read-only).
+        // Колонки C-D — жовті, призначені для ручного редагування/коригування дат.
+        // Sheet 1 тягне дати VLOOKUP-ом з цього листа за № полісу (колонка A).
+
+        const datesHdr = ['№ полісу', 'Держ. номер', 'Дата початку', 'Дата закінчення'];
+        const datesRows = policyRows.map(r => [
+            r.policy_no  || '',
+            r.plate_no   || '',
+            r.start_date || '',
+            calcEndDate(r.start_date, r.validity_period)
+        ]);
+
+        const NC3 = 4;
+        const aoa3 = [datesHdr, ...datesRows];
+        const ws3 = XLSX.utils.aoa_to_sheet(aoa3);
+
+        for (let c = 0; c < NC3; c++) applyStyle(ws3, 0, c, S_DATES_HDR);
+        for (let row = 1; row < aoa3.length; row++) {
+            for (let c = 0; c < NC3; c++) {
+                applyStyle(ws3, row, c, c < 2 ? S_DATES_REF : S_DATES_INPUT);
+            }
+        }
+        ws3['!cols'] = [
+            { wch: 18 }, { wch: 14 }, { wch: 16 }, { wch: 16 }
+        ];
+        ws3['!rows'] = [{ hpt: 24 }];
+
         // ── Збираємо книгу ─────────────────────────────────────────────
         const wb = XLSX.utils.book_new();
         XLSX.utils.book_append_sheet(wb, ws1, 'Деталі');
         XLSX.utils.book_append_sheet(wb, ws2, 'Підсумок');
+        XLSX.utils.book_append_sheet(wb, ws3, 'Дати полісів');
         XLSX.writeFile(wb, `oscpv_b2b_${todayIso}.xlsx`);
     }
 
