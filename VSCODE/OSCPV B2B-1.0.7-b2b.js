@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         OSCPV B2B — Пошук полісів (Odoo + Universalna)
 // @namespace    universalna.oscpv.b2b
-// @version      1.9.2-b2b
+// @version      1.9.3-b2b
 // @description  B2B: пакетний пошук полісів ОСЦПВ для юридичних осіб за ЄДРПОУ (incore + прямий парсинг таблиці + concurrency)
 // @author       custom
 // @match        https://odoo.icu.int/*
@@ -1626,6 +1626,12 @@
             const key = r.vin || (plateEl ? plateEl.textContent.trim() : '');
             const data = resultMap[key];
             if (!data || !data.brand) continue;
+            Object.assign(results[rowIdx], {
+                od_brand: data.brand, od_model: data.model, od_year: data.year,
+                od_fuel: data.fuel, od_engine: data.engine, od_weight: data.weight,
+                od_region: data.region, od_color: data.color, od_vin: data.vin,
+                od_calc_cat: data.calc_category
+            });
             const brandEl = tr.querySelector('.oscpv2-car-brand');
             if (brandEl) {
                 brandEl.textContent = [data.brand, data.model, data.year ? `(${data.year})` : ''].filter(Boolean).join(' ');
@@ -2024,6 +2030,12 @@
         if (stage) stage.textContent = 'ЗАВЕРШЕНО';
         if (info) info.textContent = `Готово: ${statsFound} полісів, ${statsEmpty} без даних`;
 
+        // Авто-збагачення ТЗ з OpenDataUA якщо ключ налаштовано
+        const _odApiKey = GM_getValue('oscpv_odua_api_key', '') || getOduaApiKey();
+        if (_odApiKey && results.filter(r => !r._notFound).length > 0) {
+            enrichResultsWithCarplates();
+        }
+
     }
 
     function escapeHtml(s) {
@@ -2041,190 +2053,189 @@
 
         const today = new Date();
         const todayIso = today.toISOString().slice(0, 10);
-        const todayDt = today.toISOString().replace('T', ' ').slice(0, 19) + '.000000';
 
-        // Стилі для заголовків (групові + детальні): жирний #666666, фон #AFEEEE, центр+wrap
-        const HEADER_GROUP_STYLE = {
-            font: { name: 'Arial', sz: 11, bold: true, color: { rgb: '666666' } },
-            fill: { patternType: 'solid', fgColor: { rgb: 'AFEEEE' } },
+        // ── Стилі ──────────────────────────────────────────────────────
+        const THIN = s => ({ style: 'thin', color: { rgb: s } });
+        const mkBorder = s => ({ top: THIN(s), bottom: THIN(s), left: THIN(s), right: THIN(s) });
+
+        const S_GRP = {
+            font: { name: 'Arial', sz: 11, bold: true, color: { rgb: 'FFFFFF' } },
+            fill: { patternType: 'solid', fgColor: { rgb: '072C2C' } },
+            alignment: { horizontal: 'center', vertical: 'center', wrapText: true },
+            border: mkBorder('0A4040')
+        };
+        const S_HDR = {
+            font: { name: 'Arial', sz: 10, bold: true, color: { rgb: 'FFFFFF' } },
+            fill: { patternType: 'solid', fgColor: { rgb: '0D5454' } },
             alignment: { horizontal: 'center', vertical: 'top', wrapText: true },
-            border: {
-                top: { style: 'thin', color: { rgb: 'CCCCCC' } },
-                bottom: { style: 'thin', color: { rgb: 'CCCCCC' } },
-                left: { style: 'thin', color: { rgb: 'CCCCCC' } },
-                right: { style: 'thin', color: { rgb: 'CCCCCC' } }
-            }
+            border: mkBorder('1A7070')
         };
-        const HEADER_CELL_STYLE = {
-            font: { name: 'Arial', sz: 11, bold: true, color: { rgb: '666666' } },
-            fill: { patternType: 'solid', fgColor: { rgb: 'AFEEEE' } },
-            alignment: { horizontal: 'center', vertical: 'top', wrapText: true },
-            border: {
-                top: { style: 'thin', color: { rgb: 'CCCCCC' } },
-                bottom: { style: 'thin', color: { rgb: 'CCCCCC' } },
-                left: { style: 'thin', color: { rgb: 'CCCCCC' } },
-                right: { style: 'thin', color: { rgb: 'CCCCCC' } }
-            }
+        const S_DAT = {
+            font: { name: 'Arial', sz: 10, color: { rgb: '1A1A1A' } },
+            fill: { patternType: 'solid', fgColor: { rgb: 'FFFFFF' } },
+            alignment: { horizontal: 'left', vertical: 'top', wrapText: false },
+            border: mkBorder('E0E0E0')
         };
-        const DATA_CELL_STYLE = {
-            font: { name: 'Arial', sz: 10, color: { rgb: '333333' } },
-            alignment: { vertical: 'top', wrapText: true }
+        const S_NUM = {
+            font: { name: 'Arial', sz: 10, color: { rgb: '1A1A1A' } },
+            fill: { patternType: 'solid', fgColor: { rgb: 'FFFFFF' } },
+            alignment: { horizontal: 'right', vertical: 'top', wrapText: false },
+            border: mkBorder('E0E0E0')
+        };
+        const S_SUM_HDR = {
+            font: { name: 'Arial', sz: 11, bold: true, color: { rgb: 'FFFFFF' } },
+            fill: { patternType: 'solid', fgColor: { rgb: 'FF5F03' } },
+            alignment: { horizontal: 'center', vertical: 'center', wrapText: true },
+            border: mkBorder('CC4C00')
+        };
+        const S_SUM_DAT = {
+            font: { name: 'Arial', sz: 10, color: { rgb: '1A1A1A' } },
+            fill: { patternType: 'solid', fgColor: { rgb: 'FFF8F5' } },
+            alignment: { horizontal: 'left', vertical: 'top', wrapText: false },
+            border: mkBorder('F0D8CC')
+        };
+        const S_SUM_NUM = {
+            font: { name: 'Arial', sz: 10, color: { rgb: '1A1A1A' } },
+            fill: { patternType: 'solid', fgColor: { rgb: 'FFF8F5' } },
+            alignment: { horizontal: 'right', vertical: 'top', wrapText: false },
+            border: mkBorder('F0D8CC')
         };
 
-        // Об'єднання A1:E1, F1:N1, O1:AJ1
-        const headerRow1 = [
-            'Виконання запиту', '', '', '', '',
-            'Параметри пошуку', '', '', '', '', '', '', '', '',
-            'Відповідь МТСБУ'
-        ];
-        // 36 деталізованих колонок
-        const headerRow2 = [
-            'Мітка для імпорту', 'Середовище', 'Дата запиту', 'Успішність запиту', 'Помилка якщо є',
-            'РНОКПП Фізичної або ЄДРПОУ юридичної особи або серія та номер паспорту або ID паспорту для фізичних осіб',
-            'Номер ТЗ або Vin код ТЗ', 'Vin код ТЗ',
-            'Прізвище фізичної особи або назва юридичної особи', "Ім'я", 'По батькові',
-            'Дата початку періоду', 'Дата кінця періоду', 'Тип страхування',
-            'Державний номер ТЗ', 'VIN код ТЗ', 'Серія полісу', 'Номер полісу',
-            'Рік початку дії полісу', 'Строк дії полісу', 'Страхувальник назва ПІБ',
-            'Код страхової компанії', 'Назва страхової компанії',
-            'Тип ТЗ позначення', 'Марка ТЗ', 'Повне найменування ТЗ розрах',
-            'Кількість потерпілих', 'Кількість випадків', 'Дата ДТП події',
-            'Загальна кількість вимог за полісом', 'Кількість вимог в роботі рішення не прийнято',
-            'Кількість врегульованих вимог', 'Кількість вимог за якими відмовлено у виплаті',
-            'Нарахована сума відшкодуваня', 'Сплачена сума збитку', 'Несплачена сума збитку'
-        ];
-
-        // Будуємо дані
-        const dataRows = results.map(r => {
-            const isError = !!r._notFound;
-            return [
-                // A-E: Виконання запиту
-                r.ipn || '',                            // Мітка для імпорту
-                'Пром',                                  // Середовище
-                todayDt,                                 // Дата запиту
-                isError ? '—' : 'Успішно',               // Успішність запиту
-                isError ? 'Поліси не знайдено' : '',     // Помилка якщо є
-
-                // F-N: Параметри пошуку
-                r.ipn || '',                            // РНОКПП/ЄДРПОУ
-                '',                                      // Номер ТЗ або Vin (порожнє при пошуку за ЄДРПОУ)
-                '',                                      // Vin код
-                '',                                      // Прізвище/назва (порожнє при пошуку)
-                '',                                      // Ім'я
-                '',                                      // По батькові
-                '2025-01-01',                            // Дата початку
-                todayIso,                                // Дата кінця
-                'OSCPV',                                 // Тип страхування
-
-                // O-AJ: Відповідь МТСБУ
-                r.plate_no || '',                       // Держ. номер
-                r.vin || '',                            // VIN
-                r.policy_series || '',                  // Серія полісу
-                r.policy_no || '',                      // Номер полісу
-                r.start_date || '',                     // Рік початку
-                r.validity_period || '',                // Строк дії
-                r.full_name || '',                      // Страхувальник
-                r.insurer_code || '',                   // Код СК
-                r.insurer_name || '',                   // Назва СК
-                r.vehicle_type || '',                   // Тип ТЗ позначення
-                r.vehicle_brand || '',                  // Марка
-                r.vehicle_title || '',                  // Повне найменування
-                r.claims_count !== undefined ? r.claims_count : '',
-                r.insured_events_count !== undefined ? r.insured_events_count : '',
-                Array.isArray(r.event_date) ? r.event_date.join(', ') : (r.event_date || ''),
-                r.total_claims_count !== undefined ? r.total_claims_count : '',
-                r.claims_in_work_count !== undefined ? r.claims_in_work_count : '',
-                r.settled_claims_count !== undefined ? r.settled_claims_count : '',
-                r.refused_claims_count !== undefined ? r.refused_claims_count : '',
-                r.total_loss_amount !== undefined ? r.total_loss_amount : '',
-                r.paid_loss_amount !== undefined ? r.paid_loss_amount : '',
-                r.reserved_loss_amount !== undefined ? r.reserved_loss_amount : ''
-            ];
-        });
-
-        // Збираємо aoa
-        const aoa = [headerRow1, headerRow2, ...dataRows];
-        const ws = XLSX.utils.aoa_to_sheet(aoa);
-
-        // Merges
-        ws['!merges'] = [
-            { s: { r: 0, c: 0 }, e: { r: 0, c: 4 } }, // A1:E1
-            { s: { r: 0, c: 5 }, e: { r: 0, c: 13 } }, // F1:N1
-            { s: { r: 0, c: 14 }, e: { r: 0, c: 35 } }  // O1:AJ1
-        ];
-
-        // Застосовуємо стилі ДО ВСІХ КОМІРОК
-        const numCols = 36;
-        // Рядок 1 — групи (центр, фон)
-        for (let c = 0; c < numCols; c++) {
-            const addr = XLSX.utils.encode_cell({ r: 0, c });
+        function applyStyle(ws, r, c, style) {
+            const addr = XLSX.utils.encode_cell({ r, c });
             if (!ws[addr]) ws[addr] = { t: 's', v: '' };
-            ws[addr].s = HEADER_GROUP_STYLE;
+            ws[addr].s = style;
         }
-        // Рядок 2 — детальні заголовки
-        for (let c = 0; c < numCols; c++) {
-            const addr = XLSX.utils.encode_cell({ r: 1, c });
-            if (!ws[addr]) ws[addr] = { t: 's', v: '' };
-            ws[addr].s = HEADER_CELL_STYLE;
+
+        // ── Sheet 1: Деталі полісів ─────────────────────────────────────
+        // Колонки A–W (23):
+        //   A-B  : ЄДРПОУ / Компанія
+        //   C-G  : Поліс ОСЦПВ (5)
+        //   H-L  : Транспортний засіб — МТСБУ (5)
+        //   M-S  : Збагачення OpenDataUA (7)
+        //   T-W  : Збитковість (4)
+
+        const grpRow = [
+            'ЄДРПОУ / Компанія', '',
+            'Поліс ОСЦПВ', '', '', '', '',
+            'Транспортний засіб (МТСБУ)', '', '', '', '',
+            'Дані OpenDataUA', '', '', '', '', '', '',
+            'Збитковість', '', '', ''
+        ];
+        const hdrRow = [
+            'ЄДРПОУ', 'Назва компанії',
+            'Серія', '№ полісу', 'Страховик (СК)', 'Дата початку', 'Строк дії',
+            'Держ. номер', 'VIN', 'Тип ТЗ', 'Марка ТЗ', 'Повна назва ТЗ',
+            'Марка', 'Модель', 'Рік', 'Паливо', 'Двигун', 'Маса', 'Регіон',
+            'К-сть подій', 'Нараховано, грн', 'Виплачено, грн', 'Резерв, грн'
+        ];
+
+        const dataRows1 = results.filter(r => !r._notFound).map(r => [
+            r.ipn || '',
+            r.full_name || '',
+            r.policy_series || '',
+            r.policy_no || '',
+            r.insurer_name || '',
+            r.start_date || '',
+            r.validity_period || '',
+            r.plate_no || '',
+            r.vin || '',
+            r.vehicle_type || '',
+            r.vehicle_brand || '',
+            r.vehicle_title || '',
+            r.od_brand || '',
+            r.od_model || '',
+            r.od_year || '',
+            r.od_fuel || '',
+            r.od_engine || '',
+            r.od_weight || '',
+            r.od_region || '',
+            r.insured_events_count !== undefined ? (parseInt(r.insured_events_count) || 0) : '',
+            r.total_loss_amount !== undefined ? (parseFloat(r.total_loss_amount) || 0) : '',
+            r.paid_loss_amount !== undefined ? (parseFloat(r.paid_loss_amount) || 0) : '',
+            r.reserved_loss_amount !== undefined ? (parseFloat(r.reserved_loss_amount) || 0) : ''
+        ]);
+
+        const NC1 = 23;
+        const aoa1 = [grpRow, hdrRow, ...dataRows1];
+        const ws1 = XLSX.utils.aoa_to_sheet(aoa1);
+
+        ws1['!merges'] = [
+            { s: { r: 0, c: 0 },  e: { r: 0, c: 1 } },
+            { s: { r: 0, c: 2 },  e: { r: 0, c: 6 } },
+            { s: { r: 0, c: 7 },  e: { r: 0, c: 11 } },
+            { s: { r: 0, c: 12 }, e: { r: 0, c: 18 } },
+            { s: { r: 0, c: 19 }, e: { r: 0, c: 22 } }
+        ];
+
+        for (let c = 0; c < NC1; c++) {
+            applyStyle(ws1, 0, c, S_GRP);
+            applyStyle(ws1, 1, c, S_HDR);
         }
-        // Рядки даних
-        for (let r = 2; r < aoa.length; r++) {
-            for (let c = 0; c < numCols; c++) {
-                const addr = XLSX.utils.encode_cell({ r, c });
-                if (!ws[addr]) ws[addr] = { t: 's', v: '' };
-                ws[addr].s = DATA_CELL_STYLE;
+        for (let row = 2; row < aoa1.length; row++) {
+            for (let c = 0; c < NC1; c++) {
+                applyStyle(ws1, row, c, c >= 19 ? S_NUM : S_DAT);
             }
         }
 
-        // Ширини колонок (близько до прикладу)
-        ws['!cols'] = [
-            { wch: 14 },  // A: Мітка
-            { wch: 12 },  // B: Середовище
-            { wch: 20 },  // C: Дата запиту
-            { wch: 14 },  // D: Успішність
-            { wch: 16 },  // E: Помилка
-            { wch: 22 },  // F: РНОКПП/ЄДРПОУ
-            { wch: 14 },  // G: Номер/Vin
-            { wch: 20 },  // H: Vin код
-            { wch: 28 },  // I: Прізвище/назва
-            { wch: 12 },  // J: Ім'я
-            { wch: 14 },  // K: По батькові
-            { wch: 14 },  // L: Дата початку
-            { wch: 14 },  // M: Дата кінця
-            { wch: 14 },  // N: Тип страх.
-            { wch: 14 },  // O: Держ. номер
-            { wch: 22 },  // P: VIN
-            { wch: 10 },  // Q: Серія
-            { wch: 14 },  // R: Номер полісу
-            { wch: 10 },  // S: Рік
-            { wch: 10 },  // T: Строк
-            { wch: 28 },  // U: Страхувальник
-            { wch: 8 },   // V: Код СК
-            { wch: 22 },  // W: Назва СК
-            { wch: 50 },  // X: Тип ТЗ
-            { wch: 14 },  // Y: Марка
-            { wch: 32 },  // Z: Повне найменування
-            { wch: 12 },  // AA: К-сть потерпілих
-            { wch: 12 },  // AB: К-сть випадків
-            { wch: 14 },  // AC: Дата ДТП
-            { wch: 14 },  // AD: Заг. к-сть вимог
-            { wch: 16 },  // AE: К-сть в роботі
-            { wch: 14 },  // AF: К-сть врегул.
-            { wch: 14 },  // AG: К-сть відмов
-            { wch: 14 },  // AH: Нарахована
-            { wch: 14 },  // AI: Сплачена
-            { wch: 14 }   // AJ: Несплачена
+        ws1['!cols'] = [
+            { wch: 12 }, { wch: 32 },
+            { wch: 8 },  { wch: 16 }, { wch: 28 }, { wch: 12 }, { wch: 10 },
+            { wch: 14 }, { wch: 20 }, { wch: 40 }, { wch: 18 }, { wch: 32 },
+            { wch: 16 }, { wch: 16 }, { wch: 6 },  { wch: 12 }, { wch: 12 }, { wch: 12 }, { wch: 16 },
+            { wch: 10 }, { wch: 16 }, { wch: 16 }, { wch: 16 }
         ];
+        ws1['!rows'] = [{ hpt: 24 }, { hpt: 52 }];
 
-        // Висоти рядків заголовків і даних
-        ws['!rows'] = [
-            { hpt: 18 },  // груповий заголовок
-            { hpt: 80 }   // деталізований (висота для wrap)
+        // ── Sheet 2: Підсумок по ЄДРПОУ ───────────────────────────────
+        const summaryMap = {};
+        for (const r of results) {
+            if (r._notFound) continue;
+            if (!summaryMap[r.ipn]) {
+                summaryMap[r.ipn] = {
+                    edrpou: r.ipn, name: r.full_name || '',
+                    policies: 0, vehicles: new Set(),
+                    total: 0, paid: 0, reserved: 0
+                };
+            }
+            const s = summaryMap[r.ipn];
+            s.policies++;
+            s.vehicles.add(r.vin || r.plate_no || `_${r.policy_no}`);
+            s.total += parseFloat(r.total_loss_amount) || 0;
+            s.paid  += parseFloat(r.paid_loss_amount)  || 0;
+            s.reserved += parseFloat(r.reserved_loss_amount) || 0;
+        }
+
+        const sumHdr = [
+            'ЄДРПОУ', 'Назва компанії', 'Полісів', 'ТЗ (унікальних)',
+            'Нараховано, грн', 'Виплачено, грн', 'Резерв, грн'
         ];
+        const sumRows = Object.values(summaryMap).map(s => [
+            s.edrpou, s.name, s.policies, s.vehicles.size,
+            +s.total.toFixed(2), +s.paid.toFixed(2), +s.reserved.toFixed(2)
+        ]);
 
+        const NC2 = 7;
+        const aoa2 = [sumHdr, ...sumRows];
+        const ws2 = XLSX.utils.aoa_to_sheet(aoa2);
+
+        for (let c = 0; c < NC2; c++) applyStyle(ws2, 0, c, S_SUM_HDR);
+        for (let row = 1; row < aoa2.length; row++) {
+            for (let c = 0; c < NC2; c++) {
+                applyStyle(ws2, row, c, c >= 2 ? S_SUM_NUM : S_SUM_DAT);
+            }
+        }
+        ws2['!cols'] = [
+            { wch: 12 }, { wch: 36 }, { wch: 10 }, { wch: 16 },
+            { wch: 16 }, { wch: 16 }, { wch: 16 }
+        ];
+        ws2['!rows'] = [{ hpt: 24 }];
+
+        // ── Збираємо книгу ─────────────────────────────────────────────
         const wb = XLSX.utils.book_new();
-        XLSX.utils.book_append_sheet(wb, ws, 'InsuredLoss');
-        XLSX.writeFile(wb, `oscpv_b2b_${todayIso}_${Date.now()}.xlsx`);
+        XLSX.utils.book_append_sheet(wb, ws1, 'Деталі');
+        XLSX.utils.book_append_sheet(wb, ws2, 'Підсумок');
+        XLSX.writeFile(wb, `oscpv_b2b_${todayIso}.xlsx`);
     }
 
 
