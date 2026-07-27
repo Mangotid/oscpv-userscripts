@@ -4,6 +4,8 @@
 // @version      1.9.4-b2b
 // @description  B2B: пакетний пошук полісів ОСЦПВ для юридичних осіб за ЄДРПОУ (incore + прямий парсинг таблиці + concurrency)
 // @author       custom
+// @updateURL    https://raw.githubusercontent.com/Mangotid/oscpv-userscripts/main/VSCODE/OSCPV%20B2B-1.0.7-b2b.js
+// @downloadURL  https://raw.githubusercontent.com/Mangotid/oscpv-userscripts/main/VSCODE/OSCPV%20B2B-1.0.7-b2b.js
 // @match        https://odoo.icu.int/*
 // @match        https://odoo.universalna.com/*
 // @match        https://dict.universalna.com/*
