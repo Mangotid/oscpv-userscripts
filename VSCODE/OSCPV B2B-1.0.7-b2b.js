@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         OSCPV B2B — Пошук полісів (Odoo + Universalna)
 // @namespace    universalna.oscpv.b2b
-// @version      1.9.4-b2b
+// @version      1.9.5-b2b
 // @description  B2B: пакетний пошук полісів ОСЦПВ для юридичних осіб за ЄДРПОУ (incore + прямий парсинг таблиці + concurrency)
 // @author       custom
 // @updateURL    https://raw.githubusercontent.com/Mangotid/oscpv-userscripts/main/VSCODE/OSCPV%20B2B-1.0.7-b2b.js
