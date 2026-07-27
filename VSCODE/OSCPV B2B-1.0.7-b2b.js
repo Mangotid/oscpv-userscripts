@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         OSCPV B2B — Пошук полісів (Odoo + Universalna)
 // @namespace    universalna.oscpv.b2b
-// @version      1.9.5-b2b
+// @version      1.9.6-b2b
 // @description  B2B: пакетний пошук полісів ОСЦПВ для юридичних осіб за ЄДРПОУ (incore + прямий парсинг таблиці + concurrency)
 // @author       custom
 // @updateURL    https://raw.githubusercontent.com/Mangotid/oscpv-userscripts/main/VSCODE/OSCPV%20B2B-1.0.7-b2b.js
@@ -2162,7 +2162,25 @@
         ];
 
         const policyRows = results.filter(r => !r._notFound);
-        const dataRows1 = policyRows.map(r => [
+
+        // Дедублікація: одне авто — один рядок (ключ: VIN або держ. номер).
+        // З дублікатів залишається поліс з найпізнішою датою початку.
+        function parseStartDate(s) {
+            const m = String(s || '').match(/^(\d{2})\.(\d{2})\.(\d{4})$/);
+            return m ? new Date(+m[3], +m[2] - 1, +m[1]).getTime() : 0;
+        }
+        const _vMap = new Map();
+        for (const r of policyRows) {
+            const key = r.vin || r.plate_no;
+            if (!key) { _vMap.set('_' + _vMap.size, r); continue; }
+            const ex = _vMap.get(key);
+            if (!ex || parseStartDate(r.start_date) > parseStartDate(ex.start_date)) {
+                _vMap.set(key, r);
+            }
+        }
+        const dedupRows = Array.from(_vMap.values());
+
+        const dataRows1 = dedupRows.map(r => [
             r.ipn || '',
             r.full_name || '',
             r.policy_series || '',
@@ -2290,7 +2308,7 @@
         // Sheet 1 тягне дати VLOOKUP-ом з цього листа за № полісу (колонка A).
 
         const datesHdr = ['№ полісу', 'Держ. номер', 'Дата початку', 'Дата закінчення'];
-        const datesRows = policyRows.map(r => [
+        const datesRows = dedupRows.map(r => [
             r.policy_no  || '',
             r.plate_no   || '',
             r.start_date || '',
